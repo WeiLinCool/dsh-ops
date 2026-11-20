@@ -17,7 +17,7 @@ export const BATCHING_GUIDANCE_ID = 'batching-guidance'
 /** Contributor of the one-time full lesson; the per-violation notices keep the base id. */
 export const BATCHING_GUIDANCE_LESSON_ID = `${BATCHING_GUIDANCE_ID}:lesson`
 /** Revision of the guidance text; bump it when the wording or the file format changes. */
-export const BATCHING_GUIDANCE_REVISION = '7'
+export const BATCHING_GUIDANCE_REVISION = '8'
 
 /** The shipped guidance file, resolved from this module's own location (src or lib). */
 const DEFAULT_GUIDANCE_FILE = new URL('../../prompts/batching-guidance.md', import.meta.url)

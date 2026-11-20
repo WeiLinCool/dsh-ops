@@ -20,7 +20,7 @@ await test('the shipped guidance is English Markdown with its host-source identi
   }
   assert.equal(BATCHING_GUIDANCE_ID, 'batching-guidance')
   // A wording or format change is a product change and must bump the revision.
-  assert.equal(BATCHING_GUIDANCE_REVISION, '7')
+  assert.equal(BATCHING_GUIDANCE_REVISION, '8')
 })
 
 await test('the guidance loader returns exactly the shipped Markdown file', () => {
@@ -127,10 +127,23 @@ await test('the trimmed lesson keeps the four trajectories and restores the two 
   assert.ok(text.includes('**Recheck the SDK after a mode change**'), 'the post-mode-change recheck is a core rule')
 })
 
+await test('the session scope rule reaches every surface that ships the lesson', () => {
+  // The runtime keeps top-level declarations, so a second declaration discards the
+  // program before its first line; the rule is not a loader lesson and must survive
+  // the loader-less rendering that replaces the load section.
+  const text = loadBatchingGuidance()
+  assert.ok(text.includes('## One session, one scope'), 'the scope section keeps its heading')
+  assert.ok(text.includes('compile-time SyntaxError'), 'a redeclaration is named as fatal')
+  assert.ok(text.includes('The same top-level name in a second program'), 'the table names the trap')
+  assert.ok(text.includes('Re-sending a failed program with new arguments'), 'the table names the retry trap')
+  const rendered = renderBatchingGuidance(text, { loader: false, resident: ['ops_glob'], loadable: [] })
+  assert.ok(rendered.includes('## One session, one scope'), 'the rule is not dropped with the load section')
+})
+
 await test('the shipped lesson measures its declared trimmed size', () => {
   // The trim record in the PR declares this size; a wording edit must bump the
   // revision and this number together. The 84 B delivery prefix is counted separately.
-  assert.equal(Buffer.byteLength(loadBatchingGuidance(), 'utf8'), 7538)
+  assert.equal(Buffer.byteLength(loadBatchingGuidance(), 'utf8'), 8291)
 })
 
 await test('a scope with the loader receives the shipped file unchanged', () => {

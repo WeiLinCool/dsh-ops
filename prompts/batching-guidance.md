@@ -21,6 +21,17 @@ Return enough status and completion facts for the next decision.
 8. **Recheck the SDK after a mode change**: a mode or component switch can change
    the pool; read the current SDK before planning the next call.
 
+## One session, one scope
+
+The session's live scope keeps each program's top-level `const`, `let`, `class` and
+`function`, so a second declaration of that name is a compile-time SyntaxError that
+discards the whole program before its first line runs, tool calls included. A program
+that throws keeps its names too.
+
+- One name, one program: give each program its own top-level names.
+- A failed program did nothing but already spent its names: rename before retrying.
+- Declare at top level only what a later program reads, and read it without re-declaring.
+
 ## Step 0 - the plan line
 
 Declare the intended calls on the first line of every program:
@@ -162,4 +173,6 @@ Advance by nextOffset, never by page count, and stop when the result reports com
 | One failure aborting the batch | Check Outcome status; catch dispatch exceptions and keep e.message |
 | Shell standing in for a file tool | Use the OPS file API for list, search, read and edit |
 | ops_read_files before it is loaded | ops_load_sdk in the previous program |
+| The same top-level name in a second program | Give the program its own names; a used name is spent |
+| Re-sending a failed program with new arguments | It left its names behind; rename first |
 | Using e.toolName as the error reason | Use e.message |

@@ -104,9 +104,10 @@ external English Markdown file:
   same-step only and never logged as user history, so the model sees the whole procedure on the request that
   follows the first accepted call: the first-line `// plan:` comment, the dependency split, the
   load-before-call step (only while dynamic loading publishes the loader) and four copyable trajectories.
-  The first-round text teaches each rule once (revision 7): the anti-pattern rewrite and the prose that
+  The first-round text teaches each rule once (revision 8): the anti-pattern rewrite and the prose that
   repeated the dependency split are gone, the core rules state load-only-missing and recheck-after-a-mode-change
-  explicitly, and the four trajectories ship byte-identical.
+  explicitly, the four trajectories ship byte-identical, and one short section states the shared session
+  scope — a top-level name outlives its program, so a second declaration discards the whole program.
 - **On a thin program**: when a **root** `run_code` program breaks one of three latched categories, a short
   notice is appended to that call's own result as `additionalContexts`. The tool result keeps its value, its
   content and its existing contexts; the program is never blocked or rewritten.
