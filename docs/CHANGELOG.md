@@ -14,18 +14,40 @@ this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   verbatim dies on a name rather than on its arguments. One short section carries the three rules — one name
   per program, a failed program already spent its names, declare at top level only what a later program reads
   — and the mistake table gains the two matching rows. Examples, steps and the four trajectories are
-  unchanged, and a loader-less surface keeps the rule. Measured on one 127-program session, 11 of the 17
+  unchanged, the 0.5.6 sandbox-tier section is untouched, and a loader-less surface keeps the rule. Measured on one 127-program session, 11 of the 17
   failed programs were this exact error, two of them retries of a program that had already failed;
-  `bench/probes/probe-scope-guidance.mjs` reports the shipped revision-8 text as five examples, four of them
-  not copyable twice (`load`, `dirs`, `hits`, `rows`). Revision 8; no behaviour changes.
+  `bench/probes/probe-scope-guidance.mjs` reports the shipped revision-9 text as five examples, four of them
+  not copyable twice (`load`, `dirs`, `hits`, `rows`). Revision 9; no behaviour changes.
 - 批量引导写明每个 PTC 程序共享的那个作用域：运行时在保留上下文的 REPL 里求值，程序的顶层
   `const`/`let`/`class`/`function` 会比程序活得久，同名再声明是编译期 SyntaxError，整段程序在跑第一行前
   就被丢弃，工具调用一并作废。抛错的程序同样留下名字，所以原样重发失败程序会死在名字上而不是参数上。
   新增一小节给出三条规则——一个名字只属于一个程序、失败程序已经用掉它的名字、顶层只声明后续程序要读的
-  ——错误表补上对应的两行。示例、步骤与四条轨迹均不变，无 loader 的展示面也保留该规则。一次 127 个程序的
+  ——错误表补上对应的两行。示例、步骤与四条轨迹均不变，0.5.6 的沙箱档位小节原样保留，无 loader 的展示面也保留该规则。一次 127 个程序的
   会话里，17 个失败程序中有 11 个正是这个错误，其中两个是已失败程序的再次发送；
-  `bench/probes/probe-scope-guidance.mjs` 报告随包发布的修订 8 文本为 5 个示例、其中 4 个不能二次复制
-  （`load`、`dirs`、`hits`、`rows`）。修订号 8；行为不变。
+  `bench/probes/probe-scope-guidance.mjs` 报告随包发布的修订 9 文本为 5 个示例、其中 4 个不能二次复制
+  （`load`、`dirs`、`hits`、`rows`）。修订号 9；行为不变。
+
+## [0.5.6] — 2026-11-21 — Patch release
+
+- ops-ptc's batching teacher trajectory now teaches sandbox authority: the lesson states the
+  host-reported mode, keeps only that tier, and at `danger-full-access` says never to send
+  `sandbox_permissions` or `justification`; it also pins the closed vocabulary
+  (`workspace-write`, `danger-full-access`) instead of letting the model invent a wider target
+  (#963).
+- ops-ptc 的批量调用教师轨迹新增沙箱权限教学：按宿主报告的当前模式只保留对应档位，
+  `danger-full-access` 下明确「绝不发送 `sandbox_permissions`/`justification`」，并钉住
+  合法值只有 `workspace-write` 与 `danger-full-access`，避免模型编造更宽的目标（#963）。
+- OPS-PTC batch-call guidance now rides the pre-step user batch as plain user text: the opening lesson
+  and every `bypass`/`plan`/`shape` notice are ordinary user messages with source kind `user`, no
+  `[Plugin context ...]` envelope and no "not a user instruction" disclaimer. The lesson is delivered on
+  the first accepted pre-step (and counts as taught only after the host commits it), notices are queued by
+  the root `run_code` result and delivered on the next pre-step, and the tool result itself is untouched.
+  This deliberately supersedes the #929 same-step-inbox route so the model reads the guidance as the user's
+  instruction.
+- OPS-PTC 批量调用提示改走 pre-step 用户消息：开局教学与每条 `bypass`/`plan`/`shape` 提醒都是
+  source kind 为 `user` 的普通用户消息，不再带 `[Plugin context ...]` 信封，也不再声明"不是用户指令"。
+  教学在首个被接受的 pre-step 投递（宿主提交后才算兑现），提醒由根 `run_code` 结果排队、在下一个
+  pre-step 投递，工具结果本身不被改写。这是对 #929 同一步收件箱路线的有意取代，让模型把提示当作用户指令来读。
 - Niubash no longer refuses to prepare its runtime when a full-access session's workspace contains
   the default `~/.dsh` home (#870). The workspace boundary stays armed in read-only and
   workspace-write modes, where host workspace labeling and write gating could otherwise reach the
