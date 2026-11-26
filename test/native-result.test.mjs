@@ -9,6 +9,7 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import { ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import { assert, test, report, withTempDir, waitFor } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 import { invoke } from '../lib/ptc/worker.js'
@@ -75,17 +76,17 @@ async function ptcPut(ctx, owner, items) {
   const step = await prepareStep(ctx, owner)
   try {
     const result = await executeCall(ctx, { name: 'run_code', callId: 'ptc-put-' + ++serial,
-      arguments: { description: 'Store owned rows', code: `return await tools.ops_result(${JSON.stringify({ action: 'put', items })});` },
+      arguments: { description: 'Store owned rows', code: `inspect(JSON.stringify(await tools.ops_result(${JSON.stringify({ action: 'put', items })})))` },
       agent: owner, toolSet: step.toolSet })
     assert.equal(result.isError, false, JSON.stringify(result))
-    const stored = result.value.result
+    const stored = inspected(result)
     assert.equal(stored.status, 'completed', JSON.stringify(stored))
     const lifecycle = await executeCall(ctx, { name: 'run_code', callId: 'ptc-page-' + ++serial,
-      arguments: { description: 'Page and release owned rows', code: `const page = await tools.ops_result({action:'page',id:${JSON.stringify(stored.data.id)}}); const release = await tools.ops_result({action:'release',id:${JSON.stringify(stored.data.id)}}); return {page,release};` },
+      arguments: { description: 'Page and release owned rows', code: `const page = await tools.ops_result({action:'page',id:${JSON.stringify(stored.data.id)}}); const release = await tools.ops_result({action:'release',id:${JSON.stringify(stored.data.id)}}); inspect(JSON.stringify({page,release}))` },
       agent: owner, toolSet: step.toolSet })
     assert.equal(lifecycle.isError, false, JSON.stringify(lifecycle))
-    assert.deepEqual(lifecycle.value.result.page.data.items, items)
-    assert.equal(lifecycle.value.result.release.data.status, 'released')
+    assert.deepEqual(inspected(lifecycle).page.data.items, items)
+    assert.equal(inspected(lifecycle).release.data.status, 'released')
     return stored
   } finally { step.dispose() }
 }
@@ -350,7 +351,7 @@ for (const mode of ['changed', 'failed', 'cwd-changed', 'confine-changed']) awai
       return result
     })
     const work = executeCall(ctx, { name: 'run_code', callId: 'put-presentation-' + mode, agent: owner, toolSet: step.toolSet,
-      arguments: { description: 'Attempt storage across a presentation change', code: `return await tools.${publicToolName('result')}({action:'put',items:[{unsafe:true}]});` } })
+      arguments: { description: 'Attempt storage across a presentation change', code: `inspect(JSON.stringify(await tools.${publicToolName('result')}({action:'put',items:[{unsafe:true}]})))` } })
     let timer
     try { await Promise.race([entered,
       work.then(result => { throw new Error('result operation settled before its controlled preflight: ' + JSON.stringify(result)) }),
@@ -364,9 +365,9 @@ for (const mode of ['changed', 'failed', 'cwd-changed', 'confine-changed']) awai
     release()
     const result = await work
     assert.equal(result.isError, false, JSON.stringify(result))
-    assert.ok(result.value.result.error, JSON.stringify(result))
-    assert.equal(result.value.result.error.code, 'PUBLICATION_DENIED', JSON.stringify(result))
-    assert.equal(result.value.result.error.effectState, 'none')
+    assert.ok(inspected(result).error, JSON.stringify(result))
+    assert.equal(inspected(result).error.code, 'PUBLICATION_DENIED', JSON.stringify(result))
+    assert.equal(inspected(result).error.effectState, 'none')
     assert.equal(workerCalls, 0, 'rejected admission must not start result cache IO')
     assert.equal(fs.existsSync(path.join(root, '.dsh-ops')), false)
   } finally { release(); remove(); step?.dispose(); await shutdown(ctx) }

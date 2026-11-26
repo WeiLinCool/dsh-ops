@@ -72,8 +72,8 @@ const guidanceOf = ({ accepted, decision }) => decision.messages.filter(message 
 const textsOf = messages => messages.map(message => message.content.map(part => part.text ?? '').join('')).join('\n')
 
 /** A compliant root program: plan line, two dispatches under Promise.all, no bypass. */
-const compliantProgram = '// plan: two checks\nconst [a, b] = await Promise.all([tools.ops_stat({ path: "x" }), tools.ops_stat({ path: "y" })])\nreturn [a.status, b.status]'
-const thinProgram = 'const r = await tools.ops_stat({ path: "x" })\nreturn r.status'
+const compliantProgram = '// plan: two checks\nconst [a, b] = await Promise.all([tools.ops_stat({ path: "x" }), tools.ops_stat({ path: "y" })])\ninspect(JSON.stringify([a.status, b.status]))'
+const thinProgram = 'const r = await tools.ops_stat({ path: "x" })\ninspect(JSON.stringify(r.status))'
 const rootCall = (ctx, agent, callId, code = compliantProgram) => executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
   arguments: { description: 'Fixture program', code }, callId, signal: new AbortController().signal })
 

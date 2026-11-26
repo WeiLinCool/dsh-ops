@@ -5,7 +5,8 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import Sandbox from '@deepseek-ai/dsh-sandbox-local'
 import Subprocess from '@deepseek-ai/dsh-subprocess-local'
-import { assert, test, report, skipSuite, withTempDir, ownWindowsFixture } from './lib/harness.mjs'
+import { assert, test, report, skipSuite, withTempDir, ownWindowsFixture, setSandboxMode } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { prepareWorkspace, mountWorkspacePreparation, runPreparation, preparationEnvironment, preparationSpawnSpec } from '../lib/workspace-preparation.js'
 import { invoke as fileCall } from '../lib/file/worker.js'
@@ -411,12 +412,12 @@ await test('owned Modify-only workspace starts real DSH sandbox; three modes and
         const script = await tools.ops_bash({description:"Check programmatic Bash permissions",script_path:${JSON.stringify(path.join(root,'probe.sh'))},workdir:${JSON.stringify(root)},timeoutMs:10000});
         const pipeline = await tools.ops_bash({description:"Check programmatic Bash permissions",command:"printf 'PIPE_OK' | cat",workdir:${JSON.stringify(root)},timeoutMs:10000});
         const denied = await tools.ops_bash({description:"Check programmatic Bash permissions",command:"printf blocked > ptc-outside.txt",workdir:${JSON.stringify(outside)},timeoutMs:10000});
-        return {command,script,pipeline,denied};
+        inspect(JSON.stringify({command,script,pipeline,denied}));
       `}}
       const ptc=await executeCall(ctx, request)
       assert.notEqual(ptc.isError,true,JSON.stringify(ptc))
       const ptcText=ptc.content.filter(c=>c.type==='text').map(c=>c.text).join('\n')
-      const completion=ptc.value.result
+      const completion=inspected(ptc)
       for(const [name,marker] of [['command','PTC_OK'],['script','SCRIPT_OK'],['pipeline','PIPE_OK']]) {
         assert.equal(completion[name].exitCode,0,JSON.stringify(completion[name]))
         assert.equal(completion[name].stdout.text,marker)
@@ -426,12 +427,12 @@ await test('owned Modify-only workspace starts real DSH sandbox; three modes and
       assert.equal(completion.denied.restriction.code,'EXECUTION_RESTRICTED')
       assert.ok(!fs.existsSync(path.join(outside,'ptc-outside.txt')))
       assert.doesNotMatch(ptcText,/3221225794|EXECUTOR_UNAVAILABLE|fatal error/)
-      agent.session.mode='read-only'
-      const downgrade=await executeCall(ctx, {...request,callId:'ptc-bash-downgrade',arguments:{description:'Verify PTC permission downgrade',code:`return await tools.ops_bash({description:"Check programmatic Bash permissions",command:"printf blocked > ptc-readonly.txt",workdir:${JSON.stringify(root)},timeoutMs:10000});`}})
+      await setSandboxMode(ctx, agent.session, 'read-only')
+      const downgrade=await executeCall(ctx, {...request,callId:'ptc-bash-downgrade',arguments:{description:'Verify PTC permission downgrade',code:`inspect(JSON.stringify(await tools.ops_bash({description:"Check programmatic Bash permissions",command:"printf blocked > ptc-readonly.txt",workdir:${JSON.stringify(root)},timeoutMs:10000})))`}})
       assert.notEqual(downgrade.isError,true,JSON.stringify(downgrade))
-      assert.equal(downgrade.value.result.restriction.code,'EXECUTION_RESTRICTED')
+      assert.equal(inspected(downgrade).restriction.code,'EXECUTION_RESTRICTED')
       assert.ok(!fs.existsSync(path.join(root,'ptc-readonly.txt')))
-      agent.session.mode='danger-full-access'
+      await setSandboxMode(ctx, agent.session, 'danger-full-access')
       result=await bash.execute({description:"Check session permission enforcement",command:"printf 'FULL_OK'",workdir:outside,timeoutMs:10000},exec)
       assert.equal(result.exitCode,0); assert.equal(result.sandbox.mode,'danger-full-access')
       const full=await ptcCall(ctx,worker,'batch',{root:outside,action:'run',operations:[{op:'copy',path:'keep.txt',to:'full-copy.txt'}]},exec,exec.signal)

@@ -257,7 +257,7 @@ export async function enterPtc(group, { target = TARGET_PRESET } = {}) {
     fs.writeFileSync(path.join(group.root, PROBE_FILE), 'ops-ptc entry probe\n')
     const program = '// plan: inspect the freshly made probe file once\n'
       + 'const outcome = await tools.ops_inspect_local_file({ path: ' + JSON.stringify(PROBE_FILE) + ' })\n'
-      + 'return outcome'
+      + 'inspect(JSON.stringify(outcome))'
     const executed = await host.run(agent, [
       () => [{ name: 'run_code', args: { description: 'Prove the OPS-PTC entry executes', code: program } }], []])
     const result = executed.results.find(value => value.exec.name === 'run_code')?.result

@@ -1,7 +1,7 @@
 # Batch tool calls
 
 Group independent calls in one run_code program and keep dependencies explicit.
-Return enough status and completion facts for the next decision.
+Finish with enough status and completion facts for the next decision.
 
 ## Core rules
 
@@ -10,8 +10,9 @@ Return enough status and completion facts for the next decision.
 3. **Dependencies, run sequentially**: await the earlier call before using its result.
 4. **Per-call fault tolerance**: check each Outcome status and per-file error; failures
    are values. Catch dispatch exceptions separately so one failure does not abort the rest.
-5. **Return only what is needed**: intermediate results are never shown; return a short
-   summary of the fields the next step needs.
+5. **Inspect only what is needed**: intermediate results stay out of the conversation;
+   `inspect(summary)` is the only way to see one, so pass just the fields the next step
+   needs.
 6. **OPS first for file work**: list with ops_glob, search with ops_grep, read with
    ops_read_files or ops_inspect_local_file, edit with ops_edit_file. The shell starts
    processes and reads environment facts; node:fs and node:child_process bypass path
@@ -44,6 +45,12 @@ that throws keeps its names too.
 - One name, one program: give each program its own top-level names.
 - A failed program did nothing but already spent its names: rename before retrying.
 - Declare at top level only what a later program reads, and read it without re-declaring.
+
+## Program shape
+
+Output is shown only through `inspect(...values)`; a program that never calls it reports
+nothing. A top-level `return` is a SyntaxError that discards the whole program, tool calls
+included, and that is not an instruction to inspect instead.
 
 ## Step 0 - the plan line
 
@@ -79,12 +86,12 @@ const [load, head] = await Promise.all([
   tools.ops_load_sdk({ tools: ["glob", "read_files", "stat"] }),
   tools.ops_inspect_local_file({ path: "package.json", limit: 30 }),
 ])
-return { loaded: load.data?.tools, headLines: head.data?.items?.length }
+const loadSummary = { loaded: load.data?.tools, headLines: head.data?.items?.length }
+inspect(loadSummary)
 ```
 
-Calling an unloaded name throws "tools.ops_read_files is not a function". That is not a
-reason to fall back to the shell; it is one step spent loading. Loaded names remain
-selected in this live scope, and programs need not share a process or local variables.
+Calling an unloaded name throws "tools.ops_read_files is not a function": one step spent
+loading, not a reason to fall back to the shell. Loaded names stay selected in this scope.
 
 ## Trajectory 1 - reconnaissance: independent probes in one program
 
@@ -95,12 +102,13 @@ const [dirs, src, manifest] = await Promise.all([
   tools.ops_glob({ pattern: ["src/**/*.ts"], outputMode: "paths", limit: 60 }),
   tools.ops_read_files({ files: [{ path: "package.json", limit: 30 }] }),
 ])
-return {
+const reconSummary = {
   status: [dirs.status, src.status, manifest.status],
   dirs: dirs.data?.items ?? [],
   src: (src.data?.items ?? []).slice(0, 20),
   manifestLines: manifest.data?.items?.[0]?.lineCount,
 }
+inspect(reconSummary)
 ```
 
 Three probes, one round trip. Glob paths are `data.items: string[]`; details are
@@ -124,13 +132,14 @@ const reads = await Promise.all(files.map(async file => {
       lines: read.data?.items?.[0]?.lineCount }
   } catch (error) { return { file, ok: false, reason: error instanceof Error ? error.message : String(error) } }
 }))
-return {
+const searchSummary = {
   search: { status: hits.status, error: "error" in hits ? hits.error : undefined, complete: hits.data?.complete,
     scanComplete: hits.data?.scanComplete, pageComplete: hits.data?.pageComplete,
     matchedObserved: hits.data?.matchedObserved, matchedTotal: hits.data?.matchedTotal,
     nextOffset: hits.data?.nextOffset, continuation: hits.status === "partial" ? hits.continuation : hits.data?.continuation },
   reads,
 }
+inspect(searchSummary)
 ```
 
 ## Trajectory 3 - a verified edit: revision first, patch second
@@ -141,15 +150,18 @@ const [stat, context] = await Promise.all([
   tools.ops_stat({ path: "src/policy.ts" }),
   tools.ops_inspect_local_file({ path: "src/policy.ts", offset: 1, limit: 20 }),
 ])
-if (stat.status !== "completed" || !stat.data.revision)
-  return { status: stat.status, error: "error" in stat ? stat.error : undefined }
-const edit = await tools.ops_edit_file({
-  path: "src/policy.ts",
-  expectedRevision: stat.data.revision,
-  edits: [{ oldText: "export const VERSION = 1", newText: "export const VERSION = 2" }],
-})
-return { status: edit.status, error: "error" in edit ? edit.error : undefined,
-  context: context.data?.items?.length, changed: edit.data?.changed }
+const edit = stat.status === "completed" && stat.data?.revision
+  ? await tools.ops_edit_file({
+    path: "src/policy.ts",
+    expectedRevision: stat.data.revision,
+    edits: [{ oldText: "export const VERSION = 1", newText: "export const VERSION = 2" }],
+  })
+  : undefined
+const editSummary = edit
+  ? { status: edit.status, error: "error" in edit ? edit.error : undefined,
+      context: context.data?.items?.length, changed: edit.data?.changed }
+  : { status: stat.status, error: "error" in stat ? stat.error : undefined }
+inspect(editSummary)
 ```
 
 ## Trajectory 4 - paging: a loop is still one program
@@ -170,7 +182,8 @@ for (let page = 0; page < 40; page++) {
   if (!next || next <= offset) break
   offset = next
 }
-return { lines: rows.length, complete, error, nextOffset: complete ? undefined : offset }
+const pageSummary = { lines: rows.length, complete, error, nextOffset: complete ? undefined : offset }
+inspect(pageSummary)
 ```
 
 Advance by nextOffset, never by page count, and stop when the result reports complete.
@@ -182,7 +195,7 @@ Advance by nextOffset, never by page count, and stop when the result reports com
 | No plan line, or one that is not the first line | Open every program with it |
 | Dependent calls inside Promise.all | await the dependency first, then fan out |
 | More than 128 dispatches in one program | slice(0, 128) before mapping, continue in the next program |
-| Returning the whole payload | Return only the fields the next step needs |
+| Finishing with the whole payload | End with only the fields the next step needs |
 | One failure aborting the batch | Check Outcome status; catch dispatch exceptions and keep e.message |
 | Shell standing in for a file tool | Use the OPS file API for list, search, read and edit |
 | ops_read_files before it is loaded | ops_load_sdk in the previous program |

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { assert, test, report, TEST_HOME } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { requireWorker } from './lib/boundary.mjs'
 import { executeCall } from './lib/executor.mjs'
 import { canonicalFixture } from './lib/canonical-file-runtime.mjs'
@@ -29,9 +30,9 @@ await test('real worker Native text and run_code share the canonical file outcom
     assert.match(native.content.map(b => b.text ?? '').join('\n'), /1(?: \| |\|)canonical worker payload/)
     const ptc = await executeCall(h.ctx, { agent: parent, toolSet: p.toolSet, callId: 'file-ptc', name: 'run_code',
       arguments: { description: 'Read a real worker receipt',
-        code: `return await tools.${h.definition.name}(${JSON.stringify(args)});` } })
+        code: `inspect(JSON.stringify(await tools.${h.definition.name}(${JSON.stringify(args)})))` } })
     assert.equal(ptc.isError, false, JSON.stringify(ptc))
-    assert.deepEqual(ptc.value.result, native.value)
+    assert.deepEqual(inspected(ptc), native.value)
     assert.deepEqual(validateJsonSchemaValue(h.definition.output.schema, native.value), [])
     const raw = await h.runtime.call('inspect_local_file', args, { agent: child, signal: new AbortController().signal })
     assert.equal(raw.items[0].text, 'canonical worker payload')

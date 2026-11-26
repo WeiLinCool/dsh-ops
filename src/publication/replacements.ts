@@ -265,11 +265,15 @@ export function mountReplacements(root: Context, publication: ReplacementPublica
       const note = crossReferences.length === 0 ? undefined
         : `Official ${hidden.join(', ')} ${hidden.length === 1 ? 'is' : 'are'} hidden in this scope; call ${hidden.map(name => targets.get(name)!).join(', ')} instead. ${crossReferences.join(', ')} ${crossReferences.length === 1 ? 'stays' : 'stay'} callable through the tools:sdk declaration.`
       let noted = false
+      // Host 0.2.3 requires each assembled section to carry its placement order and
+      // keeps that order for canonical history. The note inherits the first retired
+      // section's order, so it lands where the text it replaces used to sit.
+      const noteOrder = result.sections.find(section => drop.has(section.name))?.order ?? 0
       const sections = result.sections.flatMap(section => {
         if (!drop.has(section.name)) return [section]
         if (noted || note === undefined) return []
         noted = true
-        return [{ name: `dsh-ops:replaced-official:${mode}`, text: note, interpolate: false as const }]
+        return [{ name: `dsh-ops:replaced-official:${mode}`, order: noteOrder, text: note, interpolate: false as const }]
       })
       return { ...result, sections }
     })

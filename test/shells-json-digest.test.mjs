@@ -13,6 +13,7 @@ import { hostBashDefinition } from '../lib/shells/host-tool.js'
 import { bashToolDefinition } from '../lib/shells.js'
 import { publicToolName } from '../lib/policy.js'
 import { assert, report, test, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 
 const raw = JSON.stringify({ items: Array.from({ length: 1200 }, (_, index) => ({ index, status: index === 1199 ? 'failed' : 'ok', name: 'item name '.repeat(8) })) })
@@ -125,9 +126,9 @@ await test('real host registry applies Native projection and preserves nested SD
       await new Promise(resolve => setImmediate(resolve))
       let lift, executorContext
       await agent.ctx.plugin({ inject: ['tools', 'systemPrompt'], apply(inner) { executorContext = inner; lift = selectExecutor(inner, 'ptc') } })
-      const transport = await call({ agent, name: 'run_code', callId: 'outer-digest', arguments: { description: 'Read a nested Bash JSON result', code: `return await tools.${publicToolName('bash')}({ command: 'produce-json', description: 'Produce a large JSON result' });` }, signal: new AbortController().signal })
+      const transport = await call({ agent, name: 'run_code', callId: 'outer-digest', arguments: { description: 'Read a nested Bash JSON result', code: programForHost(`return await tools.${publicToolName('bash')}({ command: 'produce-json', description: 'Produce a large JSON result' });`) }, signal: new AbortController().signal })
       assert.equal(transport.isError, false, JSON.stringify(transport)); assert.equal(nested.isError, false)
-      assert.deepEqual(transport.value.result, original)
+      assert.deepEqual(inspected(transport), original)
       assert.equal(nested.content[0].text, renderHostBash(original))
       lift(); selectExecutor(executorContext, 'native')
       for (const [decision, expected] of [

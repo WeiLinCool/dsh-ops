@@ -1,5 +1,6 @@
 /** Native worker bridge. Every execution uses DSH policy, confinement and process governance. */
 import type { Context } from '../adapter/dsh/types.js'
+import { rootOf } from '../adapter/dsh/root.js'
 import type { SubprocessRuntime } from '../adapter/dsh/types.js'
 import type { SandboxPolicyService } from '../adapter/dsh/types.js'
 import type { ToolRunContext } from '../adapter/dsh/types.js'
@@ -44,7 +45,7 @@ export async function invoke(ctx: Context, file: string, tool: string, args: unk
     const session = exec?.agent?.session
     if (!session?.id) return failure('EXECUTOR_UNAVAILABLE', 'An authoritative session identity is required.')
     return await withResultSession(ctx, session, signal, currentSignal =>
-      withCallBudget(ctx.root ?? ctx, String(session.id), currentSignal,
+      withCallBudget(rootOf(ctx), String(session.id), currentSignal,
         () => invokeTrusted(ctx, file, tool, args, exec, currentSignal, config, admission)))
   }
   catch (error) {

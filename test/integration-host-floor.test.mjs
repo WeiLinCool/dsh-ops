@@ -16,18 +16,18 @@ import { apply } from '../lib/index.js'
 
 await test('the declared engines.dsh floor is read from the package manifest', async () => {
   const { declaredHostFloor } = await import('../lib/adapter/dsh/host-floor.js')
-  assert.equal(declaredHostFloor(), '0.2.2-rc.1')
+  assert.equal(declaredHostFloor(), '0.2.2-rc.5')
 })
 
 await test('semver precedence decides below-floor, with prerelease rules kept', async () => {
   const { versionBelowFloor } = await import('../lib/adapter/dsh/host-floor.js')
-  const floor = '0.2.2-rc.1'
+  const floor = '0.2.2-rc.5'
   assert.equal(versionBelowFloor('0.2.1', floor), true, 'an older release is below')
-  assert.equal(versionBelowFloor('0.2.2-rc.0', floor), true, 'an earlier prerelease is below')
+  assert.equal(versionBelowFloor('0.2.2-rc.4', floor), true, 'an earlier prerelease is below')
   assert.equal(versionBelowFloor('0.1.9', floor), true, 'an older minor is below')
-  assert.equal(versionBelowFloor('0.2.2-rc.1', floor), false, 'the floor itself is not below')
+  assert.equal(versionBelowFloor('0.2.2-rc.5', floor), false, 'the floor itself is not below')
   assert.equal(versionBelowFloor('0.2.2', floor), false, 'a release outranks its prerelease')
-  assert.equal(versionBelowFloor('0.2.2-rc.2', floor), false, 'a later prerelease is not below')
+  assert.equal(versionBelowFloor('0.2.2-rc.6', floor), false, 'a later prerelease is not below')
   assert.equal(versionBelowFloor('0.2.3', floor), false, 'a newer release is not below')
   assert.equal(versionBelowFloor('1.0.0', floor), false)
 })
@@ -49,15 +49,15 @@ await test('a host below the floor hears one named diagnosis at activation', () 
   try {
     ctx.provide('pluginPackages', { resolution: { entries: [
       { scope: 'installation', name: '@deepseek-ai/dsh-app-boot', packageDir }] } })
-    await assert.rejects(assertHostFloor(ctx), /requires DSH 0\.2\.2-rc\.1 or newer/i)
+    await assert.rejects(assertHostFloor(ctx), /requires DSH 0\.2\.2-rc\.5 or newer/i)
     // The whole row answers with the same diagnosis instead of loading.
-    await assert.rejects(apply(ctx, {}), /0\.2\.2-rc\.1/, 'apply must refuse an older host by the declared floor')
+    await assert.rejects(apply(ctx, {}), /0\.2\.2-rc\.5/, 'apply must refuse an older host by the declared floor')
   } finally { await shutdown(ctx) }
 }))
 
 await test('the floor releases hosts at or above it, and an unknown version is never refused', () => withTempDir('host-floor-ok', async root => {
   const { assertHostFloor } = await import('../lib/adapter/dsh/host-floor.js')
-  for (const version of ['0.2.2-rc.1', '0.2.3', '0.3.0']) {
+  for (const version of ['0.2.2-rc.5', '0.2.3', '0.3.0']) {
     const packageDir = seedFakeInstallation(path.join(root, 'host-' + version), version)
     const { ctx } = await bootHost({ withWorkingDirectory: true })
     try {

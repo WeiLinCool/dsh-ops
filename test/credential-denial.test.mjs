@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { assert, test, report, ownWindowsFixture, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { requireWorker } from './lib/boundary.mjs'
 import { bootLoop } from './lib/agent-loop.mjs'
 import { credentialRefusal, credentialPath, DENY_ENV } from '../lib/credential-policy.js'
@@ -35,14 +36,14 @@ for (const ptcMode of [false, true]) await test(`real ${ptcMode ? 'PTC' : 'Nativ
     host = await bootLoop(root, { ptcMode, discoveryConfig: { alwaysLoaded: ['write_file', ptcMode ? 'result' : 'read_files'] } })
     const forbidden = [temporary, path.dirname(temporary), outside, target, 'PRIVATE_FIXTURE_SECRET']
     const scripts = ptcMode ? [[{ name: 'run_code', args: { description: 'Verify private credential denials', code:
-      `return { read: await tools.${publicToolName('inspect_local_file')}({path:${JSON.stringify(target)}}), store: await tools.${publicToolName('result')}({action:'put',root:${JSON.stringify(outside)},items:[{text:'MUST_NOT_WRITE'}]}) };` } }], []]
+      `inspect(JSON.stringify({ read: await tools.${publicToolName('inspect_local_file')}({path:${JSON.stringify(target)}}), store: await tools.${publicToolName('result')}({action:'put',root:${JSON.stringify(outside)},items:[{text:'MUST_NOT_WRITE'}]}) }))` } }], []]
       : [[{ name: publicToolName('read_files'), args: { files: [{ path: target }] } },
         { name: publicToolName('write_file'), args: { path: target, content: 'MUST_NOT_WRITE', expectedRevision: 'absent' } }], []]
     const run = await host.run(await host.agent(), scripts)
     if (ptcMode) {
       const result = run.results.find(item => item.exec.name === 'run_code').result
       assert.equal(result.isError, false, JSON.stringify(result))
-      privateRefusal(result.value.result.read, forbidden); privateRefusal(result.value.result.store, forbidden)
+      privateRefusal(inspected(result).read, forbidden); privateRefusal(inspected(result).store, forbidden)
     } else {
       assert.equal(run.results.length, 2)
       for (const { result } of run.results) {

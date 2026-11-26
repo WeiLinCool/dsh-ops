@@ -17,6 +17,7 @@ import { resolveConfig } from '../lib/config.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 requireWorker('native-ptc-shared-source')
 
@@ -57,15 +58,15 @@ for (const removed of ['native', 'ptc']) await test(`stat shares canonical sourc
     step = await prepareStep(ctx, agent); steps.push(step)
     assert.equal(tools.executable('ops_stat', agent, step.toolSet), canonical)
     const result = await executeCall(ctx, { agent, toolSet: step.toolSet, name: 'run_code', callId: 'shared-stat',
-      arguments: { description: 'Shared stat', code: "return await tools.ops_stat({path:'note'});" } })
+      arguments: { description: 'Shared stat', code: "inspect(JSON.stringify(await tools.ops_stat({path:'note'})))" } })
     assert.equal(result.isError, false, JSON.stringify(result))
-    assert.equal(result.value.result.data.exists, true, JSON.stringify(result))
+    assert.equal(inspected(result).data.exists, true, JSON.stringify(result))
     const queries = { grep: { pattern: 'fixture', path: '.' }, glob: { pattern: ['**/*'], path: '.' }, read_files: { files: [{ path: 'note' }] } }
     for (const [api, args] of Object.entries(queries)) {
       const called = await executeCall(ctx, { agent, toolSet: step.toolSet, name: 'run_code', callId: `ptc-${api}`,
-        arguments: { description: api, code: `return await tools.ops_${api}(${JSON.stringify(args)});` } })
+        arguments: { description: api, code: `inspect(JSON.stringify(await tools.ops_${api}(${JSON.stringify(args)})))` } })
       assert.equal(called.isError, false, JSON.stringify(called))
-      assert.equal(called.value.result.status, 'completed', JSON.stringify(called))
+      assert.equal(inspected(called).status, 'completed', JSON.stringify(called))
     }
     executor()
     await agent.ctx.plugin({ inject: ['tools', 'systemPrompt'], apply(inner) { executor = selectExecutor(inner, 'native') } })
@@ -87,9 +88,9 @@ for (const removed of ['native', 'ptc']) await test(`stat shares canonical sourc
     }
     step = await prepareStep(ctx, agent); steps.push(step)
     const after = await executeCall(ctx, { agent, toolSet: step.toolSet, name: removed === 'native' ? 'run_code' : 'ops_stat', callId: 'remaining-stat',
-      arguments: removed === 'native' ? { description: 'Still live', code: "return await tools.ops_stat({path:'note'});" } : { path: 'note' } })
+      arguments: removed === 'native' ? { description: 'Still live', code: "inspect(JSON.stringify(await tools.ops_stat({path:'note'})))" } : { path: 'note' } })
     assert.equal(after.isError, false, JSON.stringify(after))
-    assert.equal((removed === 'native' ? after.value.result : after.value).data.exists, true, JSON.stringify(after))
+    assert.equal((removed === 'native' ? inspected(after) : after.value).data.exists, true, JSON.stringify(after))
     await (removed === 'native' ? ptc : native).dispose()
     for (const api of SHARED_FILE_APIS) assert.equal(tools.get(`ops_${api}`, agent), undefined)
   } finally { steps.forEach(step => step.dispose()); await shutdown(ctx) }
@@ -126,10 +127,10 @@ for (const mode of ['native', 'ptc']) await test(`${mode} honors intermediate an
     }
     const call = (step, api, id) => executeCall(ctx, { agent: child, toolSet: step.toolSet,
       name: mode === 'native' ? `ops_${api}` : 'run_code', callId: id,
-      arguments: mode === 'native' ? { path: 'note' } : { description: id, code: `return await tools.ops_${api}({path:'note'});` } })
+      arguments: mode === 'native' ? { path: 'note' } : { description: id, code: `inspect(JSON.stringify(await tools.ops_${api}({path:'note'})))` } })
     const live = await call(before, 'stat', 'live-stat')
     assert.equal(live.isError, false, JSON.stringify(live))
-    assert.equal((mode === 'native' ? live.value : live.value.result).data.exists, true)
+    assert.equal((mode === 'native' ? live.value : inspected(live)).data.exists, true)
     const restriction = await middle.ctx.plugin({ inject: ['tools'], apply(inner) {
       inner.tools.restrict({ deny: SHARED_FILE_APIS.map(api => `ops_${api}`) })
     } })
@@ -193,9 +194,9 @@ await test('background PTC conflict is observed, cleaned up and retryable after 
     const step = await prepareStep(ctx, agent); steps.push(step)
     assert.ok(tools.executable('ops_stat', agent, step.toolSet), 'recovered configuration must allow a fresh attachment')
     const result = await executeCall(ctx, { agent, toolSet: step.toolSet, name: 'run_code', callId: 'retry-stat',
-      arguments: { description: 'Recovered stat', code: "return await tools.ops_stat({path:'note'});" } })
+      arguments: { description: 'Recovered stat', code: "inspect(JSON.stringify(await tools.ops_stat({path:'note'})))" } })
     assert.equal(result.isError, false, JSON.stringify(result))
-    assert.equal(result.value.result.data.exists, true, JSON.stringify(result))
+    assert.equal(inspected(result).data.exists, true, JSON.stringify(result))
     assert.deepEqual(unhandled, [])
   } finally {
     steps.forEach(step => step.dispose())

@@ -14,6 +14,7 @@ import { publicToolName, BASH_TOOL } from '../lib/policy.js'
 import { bootHost, shutdown, scopedToolNames } from './lib/host.mjs'
 import { prepareStep, executeCall, selectExecutor } from './lib/executor.mjs'
 import { assert, test, report, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 
 await test('resident settings exist only on enhanced presets, default on, and have no global gate', () => {
@@ -117,11 +118,11 @@ for (const mode of ['ptc', 'ops-ptc']) for (const residentTools of [true, false]
         const requested = residentTools ? ['stat'] : ['stat', 'result']
         const selected = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
           arguments: { description: 'Load progressive OPS APIs', code: `const selected = await tools.ops_load_sdk({tools:${JSON.stringify(requested)}});
-            const blocked = await tools.ops_load_sdk({tools:['inspect_local_file']}); return {selected,blocked}` },
+            const blocked = await tools.ops_load_sdk({tools:['inspect_local_file']}); inspect(JSON.stringify({selected,blocked}))` },
           callId: 'resident-' + ++sequence, signal: new AbortController().signal })
         assert.equal(selected.isError, false, JSON.stringify(selected))
-        assert.equal(selected.value.result.selected.status, 'completed', JSON.stringify(selected))
-        if (!residentTools) assert.equal(selected.value.result.blocked.error.code, 'INVALID_ARGUMENT', JSON.stringify(selected))
+        assert.equal(inspected(selected).selected.status, 'completed', JSON.stringify(selected))
+        if (!residentTools) assert.equal(inspected(selected).blocked.error.code, 'INVALID_ARGUMENT', JSON.stringify(selected))
         await step(ctx, agent)
         assert.ok(names(ctx, agent).includes(publicToolName('stat')), 'progressive selection works with resident off')
         if (!residentTools) {
@@ -163,7 +164,7 @@ await test('a row with batchingGuidance off publishes no notice at all', () => w
     await waitFor(() => names(ctx, agent).includes(publicToolName('stat')))
     // The same program earns a plan notice on a row that enabled the switch.
     const result = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'Thin fixture', code: 'const r = await tools.ops_stat({ path: "a" })\nreturn r.status' },
+      arguments: { description: 'Thin fixture', code: 'const r = await tools.ops_stat({ path: "a" })\ninspect(JSON.stringify(r.status))' },
       callId: 'batching-off-' + ++sequence, signal: new AbortController().signal })
     assert.equal(result.isError, false, JSON.stringify(result))
     assert.equal((result.additionalContexts ?? []).length, 0, 'switch off: no listener, therefore no notice')
@@ -215,7 +216,7 @@ await test('ops-ptc batchingGuidance teaches once on the first pre-step as user-
     // A thin program queues a notice for the next pre-step; the tool result itself
     // stays untouched, so nothing marks the guidance as plugin context.
     const run = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'Thin fixture', code: 'const r = await tools.ops_stat({ path: "a" })\nreturn r.status' },
+      arguments: { description: 'Thin fixture', code: 'const r = await tools.ops_stat({ path: "a" })\ninspect(JSON.stringify(r.status))' },
       callId: 'batching-teach-1', signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
     assert.equal((run.additionalContexts ?? []).length, 0, 'guidance never rides the tool result')
@@ -264,7 +265,7 @@ await test('a read-only loader-less lesson and notice keep the mutating API out'
     commitGuidance(ctx, agent, guidanceOf(first))
     // The same surface narrows the bypass notice: no write API, the reader stays named.
     const result = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'shape fixture', code: 'const r = await tools.ops_bash({ description: "list", command: "ls -la" })\nreturn r.stdout.text' },
+      arguments: { description: 'shape fixture', code: 'const r = await tools.ops_bash({ description: "list", command: "ls -la" })\ninspect(JSON.stringify(r.stdout.text))' },
       callId: 'readonly-lesson-' + ++sequence, signal: new AbortController().signal })
     assert.equal((result.additionalContexts ?? []).length, 0, 'the notice never rides the tool result')
     const notice = textsOf(guidanceOf(await drivePreStep(agent, 1)))
@@ -293,7 +294,7 @@ await test('ops-ptc without batchingGuidance teaches nothing on the first turn',
     await waitFor(() => names(ctx, agent).includes(publicToolName('stat')))
     assert.equal(guidanceOf(await drivePreStep(agent, 1)).length, 0)
     const run = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'Thin fixture', code: 'const r = await tools.ops_stat({ path: "a" })\nreturn r.status' },
+      arguments: { description: 'Thin fixture', code: 'const r = await tools.ops_stat({ path: "a" })\ninspect(JSON.stringify(r.status))' },
       callId: 'batching-off-teach', signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
     assert.equal((run.additionalContexts ?? []).length, 0, 'switch off: no listener, therefore no lesson and no notice')
@@ -311,24 +312,24 @@ await test('the root run_code trigger answers on the next pre-step', () => withT
       arguments: { description: 'shape fixture', code }, callId: 'shape-' + ++sequence, signal: new AbortController().signal })
     const nextText = async () => textsOf(guidanceOf(await drivePreStep(agent, 1)))
     // A compliant program earns nothing, which is what keeps the notice meaningful.
-    const good = await run('// plan: stat one path; stat another\nconst [a, b] = await Promise.all([tools.ops_stat({ path: "a" }), tools.ops_stat({ path: "b" })])\nreturn { a, b }')
+    const good = await run('// plan: stat one path; stat another\nconst [a, b] = await Promise.all([tools.ops_stat({ path: "a" }), tools.ops_stat({ path: "b" })])\ninspect(JSON.stringify({ a, b }))')
     assert.equal(good.isError, false, JSON.stringify(good))
     assert.equal((good.additionalContexts ?? []).length, 0, 'the result itself carries no guidance')
     assert.equal(await nextText(), '', 'a compliant program earns no notice')
     // No plan line: the plan category speaks, and it says only that the comment is missing.
-    const thin = await run('const r = await tools.ops_stat({ path: "a" })\nreturn r.status')
+    const thin = await run('const r = await tools.ops_stat({ path: "a" })\ninspect(JSON.stringify(r.status))')
     assert.equal(thin.isError, false, JSON.stringify(thin))
     const planNotice = await nextText()
     assert.match(planNotice, /did not open with a plan line/, 'the plan notice rides the next pre-step')
     assert.doesNotMatch(planNotice, /Promise\.all/, 'the plan notice stays about the comment')
     // A shell listing is a bypass; resident file APIs are reachable without loading,
     // so the notice still names them even though this pool could not load them.
-    const bypass = await run('const r = await tools.ops_bash({ description: "list", command: "ls -la" })\nreturn r.stdout.text')
+    const bypass = await run('const r = await tools.ops_bash({ description: "list", command: "ls -la" })\ninspect(JSON.stringify(r.stdout.text))')
     const bypassNotice = await nextText()
     assert.match(bypassNotice, /ops_inspect_local_file/, 'the notice names the resident file API')
     assert.doesNotMatch(bypassNotice, /ops_bash/, 'the shell it just accused is not offered as the fix')
     // The trigger queues text and never rewrites the tool result itself.
-    assert.equal(thin.value.result, 'completed', JSON.stringify(thin.value))
+    assert.equal(inspected(thin), 'completed', JSON.stringify(thin.value))
   } finally { await shutdown(ctx) }
 }))
 
@@ -341,7 +342,7 @@ await test('a read-only agent is never told to edit files through the notice', (
     // The policy is resolved per delivery, so a read-only session narrows the surface.
     agent.session.mode = 'read-only'
     const result = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'shape fixture', code: 'const r = await tools.ops_bash({ description: "list", command: "ls -la" })\nreturn r.stdout.text' },
+      arguments: { description: 'shape fixture', code: 'const r = await tools.ops_bash({ description: "list", command: "ls -la" })\ninspect(JSON.stringify(r.stdout.text))' },
       callId: 'readonly-' + ++sequence, signal: new AbortController().signal })
     assert.equal((result.additionalContexts ?? []).length, 0)
     const text = textsOf(guidanceOf(await drivePreStep(agent, 1)))

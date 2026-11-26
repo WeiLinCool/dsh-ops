@@ -9,6 +9,7 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import { jsonSchemaToTs } from '@deepseek-ai/dsh-tool-executor-ptc'
 import { assert, test, report, withTempDir, wait, waitFor } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 import * as ptcModule from '../lib/ptc/index.js'
@@ -60,8 +61,8 @@ async function direct(ctx, agent, name, args) {
 }
 async function code(ctx, agent, body) {
   const value = await executeCall(ctx, { name: 'run_code', callId: 'sdk-call-' + ++serial, agent,
-    signal: new AbortController().signal, arguments: { description: 'Exercise the progressive OPS SDK', code: body } })
-  assert.equal(value.isError, false, JSON.stringify(value)); return value.value.result
+    signal: new AbortController().signal, arguments: { description: 'Exercise the progressive OPS SDK', code: programForHost(body) } })
+  assert.equal(value.isError, false, JSON.stringify(value)); return inspected(value)
 }
 await test('SDK config and request validation name unknown keys and reject unsupported selections atomically', async () => {
   assert.deepEqual(resolvePtcConfig().alwaysLoaded, [])

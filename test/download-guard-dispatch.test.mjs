@@ -8,6 +8,7 @@ import * as guard from '../lib/components/download-guard/index.js'
 import { publicToolName } from '../lib/policy.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 
 const toolName = publicToolName('bash')
 const command = 'curl -o out.iso https://example.test/a.iso'
@@ -39,7 +40,7 @@ await test('real Native and Node PTC dispatch enforce the configured guard and d
     assert.equal(denied.isError, true, JSON.stringify(denied))
     assert.match(JSON.stringify(denied), /DOWNLOAD_TO_FILE|configured downloader/)
     assert.equal(calls, 0, 'the real tool must not run')
-    const nested = await execute(ptc, 'run_code', { description: 'Check the download refusal', code: `return await tools.${toolName}({command:${JSON.stringify(command)}});` })
+    const nested = await execute(ptc, 'run_code', { description: 'Check the download refusal', code: `inspect(JSON.stringify(await tools.${toolName}({command:${JSON.stringify(command)}})))` })
     assert.match(JSON.stringify(nested), /DOWNLOAD_TO_FILE|configured downloader/)
     assert.equal(calls, 0, 'the PTC nested tool must not run')
     const allowed = await execute(native, toolName, { command: 'node download.cjs --help' })

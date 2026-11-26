@@ -11,6 +11,7 @@ import * as ptcModule from '../lib/ptc/index.js'
 import { applyComponent } from '../lib/index.js'
 import { definition } from '../lib/file/contract.js'
 import { assert, test, report, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { isPresentationProbe } from '../lib/presentation.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
@@ -60,13 +61,13 @@ for (const discoveryFirst of [true, false]) await test('combined Native/PTC/disc
     const stat = await call(ctx, native, 'ops_stat', { path: 'sample.txt' })
     assert.equal(stat.value.data.bytes, 6, JSON.stringify(stat))
     for (const scope of [child, sibling, code]) assert.equal((await names(ctx, scope)).includes('ops_stat'), false)
-    const firstCode = await call(ctx, code, 'run_code', { description: 'Check progressive loading', code: "const selected=await tools.ops_load_sdk({tools:['stat']});let unavailable=false;try{await tools.ops_stat({path:'sample.txt'})}catch{unavailable=true}return{selected,unavailable}" })
-    assert.equal(firstCode.isError, false, JSON.stringify(firstCode)); assert.equal(firstCode.value.result.unavailable, true)
+    const firstCode = await call(ctx, code, 'run_code', { description: 'Check progressive loading', code: "const selected=await tools.ops_load_sdk({tools:['stat']});let unavailable=false;try{await tools.ops_stat({path:'sample.txt'})}catch{unavailable=true};inspect(JSON.stringify({selected,unavailable}))" })
+    assert.equal(firstCode.isError, false, JSON.stringify(firstCode)); assert.equal(inspected(firstCode).unavailable, true)
     await ctx.get('systemPrompt').assemble({ scope: code })
     assert.equal((await names(ctx, code)).includes('ops_stat'), false)
     await step(ctx, code)
-    const secondCode = await call(ctx, code, 'run_code', { description: 'Check loaded stat API', code: "return await tools.ops_stat({path:'sample.txt'})" })
-    assert.equal(secondCode.value.result.data.bytes, 6, JSON.stringify(secondCode))
+    const secondCode = await call(ctx, code, 'run_code', { description: 'Check loaded stat API', code: "inspect(JSON.stringify(await tools.ops_stat({path:'sample.txt'})))" })
+    assert.equal(inspected(secondCode).data.bytes, 6, JSON.stringify(secondCode))
     assert.equal((await names(ctx, child)).includes('ops_stat'), false)
     await fileRow.dispose()
     assert.equal((await call(ctx, native, 'ops_stat', { path: 'sample.txt' })).value.data.bytes, 6, 'discovery owns its independent worker')
@@ -198,11 +199,11 @@ await test('same-scope PTC rows also use unique owned sections and restore the p
     } finally { captured.dispose() }
     await second.dispose()
     await waitFor(async () => (await names(ctx, owner)).includes('ops_stat') && !(await names(ctx, owner)).includes('ops_grep'))
-    const restored = await call(ctx, owner, 'run_code', { description: 'Use the restored owner', code: "return await tools.ops_stat({path:'restore.txt'})" })
-    assert.equal(restored.value.result.status, 'completed', JSON.stringify(restored))
+    const restored = await call(ctx, owner, 'run_code', { description: 'Use the restored owner', code: "inspect(JSON.stringify(await tools.ops_stat({path:'restore.txt'})))" })
+    assert.equal(inspected(restored).status, 'completed', JSON.stringify(restored))
     await first.dispose()
     await waitFor(async () => (await names(ctx, owner)).includes('ops_load_sdk'))
-    assert.equal((await call(ctx, owner, 'run_code', { description: 'Check restored progressive SDK', code: "try { await tools.ops_stat({path:'.'}); return false } catch { return true }" })).value.result, true)
+    assert.equal(inspected(await call(ctx, owner, 'run_code', { description: 'Check restored progressive SDK', code: "try { await tools.ops_stat({path:'.'}); inspect(JSON.stringify(false)) } catch { inspect(JSON.stringify(true)) }" })), true)
   } finally { await shutdown(ctx) }
   assert.deepEqual(errors, [], 'superseded attachments must stop before touching disposed contexts')
 }))

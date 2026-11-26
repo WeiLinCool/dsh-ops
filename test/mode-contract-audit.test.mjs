@@ -13,6 +13,7 @@ import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, executeCall, prepareStep } from './lib/executor.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 import { assert, test, report, withTempDir, waitFor } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 process.env.DSH_OPS_LEGACY_ROWS = '1'
 requireWorker('mode-contract-audit')
 const official = ['read', 'glob', 'grep', 'edit', 'read_image']
@@ -75,22 +76,22 @@ for (const [mode, component] of [['ptc-control', undefined], ['ptc', Ptc], ['ops
       if (component && mode !== 'standard') {
         const run = async code => {
           const result = await executeCall(ctx, { agent, name: 'run_code', arguments: { description: 'Verify SDK admission', code } })
-          assert.equal(result.isError, false, JSON.stringify(result)); return result.value.result
+          assert.equal(result.isError, false, JSON.stringify(result)); return inspected(result)
         }
-        const loaded = await run("return await tools.ops_load_sdk({tools:['glob','grep','read_files']});")
+        const loaded = await run("inspect(JSON.stringify(await tools.ops_load_sdk({tools:['glob','grep','read_files']})))")
         assert.equal(loaded.status, 'completed')
         await ctx.serial('session/event', agent.session, { type: 'step/end' })
         const next = await capture('loaded')
         assert.ok(next.admitted.includes('ops_glob')); assert.ok(next.sdk.includes('ops_glob:'))
         assert.match(next.sdk, /paths \(default\): string\[\]/u)
         assert.match(next.sdk, /files_with_matches: \{path\}\[\]/u)
-        const value = await run("const kind = typeof tools.glob; return {kind, ops: await tools.ops_glob({pattern:['*.txt'],outputMode:'paths'})};")
+        const value = await run("const kind = typeof tools.glob; inspect(JSON.stringify({kind, ops: await tools.ops_glob({pattern:['*.txt'],outputMode:'paths'})}))")
         assert.equal(value.kind, 'undefined', 'the replaced official glob binding is gone from the SDK')
         assert.equal(value.ops.status, 'completed')
         assert.ok(value.ops.data.items.some(file => file.endsWith('note.txt')))
         // The kept names stay present in the program bindings, not only in the
         // admission set: presence is compared per name across all three views.
-        const kept = await run("return {edit: typeof tools.edit, image: typeof tools.read_image}")
+        const kept = await run("inspect(JSON.stringify({edit: typeof tools.edit, image: typeof tools.read_image}))")
         assert.equal(kept.edit, 'function', 'the official edit binding stays callable')
         assert.equal(kept.image, 'function', 'the official read_image binding stays callable')
       }

@@ -28,13 +28,20 @@ function sdk(root) {
     }]
   }))
 }
-const execute = (heading, tools) => new AsyncFunction('tools', program(heading))(tools)
+// The shipped programs report through `inspect(...)`, exactly as the scoped REPL does;
+// this harness captures the inspected values instead of rendering them as text.
+const execute = async (heading, tools) => {
+  let inspected
+  const inspect = (...values) => { inspected = values.length === 1 ? values[0] : values }
+  await new AsyncFunction('tools', 'inspect', program(heading))(tools, inspect)
+  return inspected
+}
 
 await test('every shipped program typechecks against the generated discriminated SDK', async () => {
   await withTempDir('teaching-types', async root => {
     const file = path.join(root, 'examples.ts')
     const sdkPath = path.join(PACKAGE_ROOT, 'lib/ptc/sdk').replaceAll('\\', '/')
-    fs.writeFileSync(file, `declare const tools: import(${JSON.stringify(sdkPath)}).OpsSdk;\n`
+    fs.writeFileSync(file, `declare const tools: import(${JSON.stringify(sdkPath)}).OpsSdk;\ndeclare function inspect(...values: unknown[]): void;\n`
       + blocks.map((block, index) => `async function example${index}() {\n${block}\n}`).join('\n'))
     const compilation = ts.createProgram([file], { noEmit: true, strict: true, skipLibCheck: true, types: [],
       target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler })

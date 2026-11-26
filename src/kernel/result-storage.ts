@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
 import type { SandboxExecutionPolicy, ConfinedArgv } from '../adapter/dsh/types.js'
+import { rootOf } from '../adapter/dsh/root.js'
 import type { WorkerStorage } from '../execution/protocol.js'
 import { workerEnvelope } from '../execution/protocol.js'
 import { CAPABILITIES } from '../capabilities/registry.js'
@@ -115,7 +116,7 @@ export async function resultStorage(ctx: StorageHost, session: ResultSession, sc
   signal?: AbortSignal, confined?: ConfinedArgv, admission?: () => boolean): Promise<WorkerStorage | undefined> {
   if (admission && !admission()) return undefined
   const nonce = resultSessionNonce(ctx, session), key = digest([session.id, policy.workspaceRoot, nonce])
-  const owner = ctx.root ?? ctx
+  const owner = rootOf(ctx)
   let cache = locations.get(owner)
   if (!cache) { cache = new Map(); locations.set(owner, cache) }
   let location = cache.get(key)

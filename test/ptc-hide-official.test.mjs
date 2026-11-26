@@ -12,6 +12,7 @@ import { mountReplacements } from '../lib/publication/replacements.js'
 import { integration } from '../lib/integration/index.js'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 process.env.DSH_OPS_LEGACY_ROWS = '1'
 requireWorker('ptc-hide-official')
 
@@ -178,7 +179,7 @@ await test('loading the SDK does not resurrect the official tools', () => withTe
   const step = await prepareStep(ctx, owner)
   try {
     const run = await executeCall(ctx, { agent: owner, toolSet: step.toolSet, name: 'run_code', callId: 'hide-load',
-      arguments: { description: 'Load grep', code: "return await tools.ops_load_sdk({tools:['grep']})" },
+      arguments: { description: 'Load grep', code: programForHost("return await tools.ops_load_sdk({tools:['grep']})") },
       signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
   } finally { step.dispose() }
@@ -293,10 +294,10 @@ await test('disposing the mode row restores the official file tools and they sta
   const step = await prepareStep(ctx, owner)
   try {
     const run = await executeCall(ctx, { agent: owner, toolSet: step.toolSet, name: 'run_code', callId: 'hide-restore',
-      arguments: { description: 'Call the restored official tools', code: 'return { read: await tools.read({}), glob: await tools.glob({}), grep: await tools.grep({}) }' },
+      arguments: { description: 'Call the restored official tools', code: programForHost('return { read: await tools.read({}), glob: await tools.glob({}), grep: await tools.grep({}) }') },
       signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
-    assert.deepEqual(run.value.result, { read: { official: 'read' }, glob: { official: 'glob' }, grep: { official: 'grep' } })
+    assert.deepEqual(inspected(run), { read: { official: 'read' }, glob: { official: 'glob' }, grep: { official: 'grep' } })
   } finally { step.dispose() }
 })))
 
@@ -331,10 +332,10 @@ await test('an unattached projection keeps the official file tools callable', ()
       for (const name of REPLACED) assert.ok(admitted.includes(name), name + ' stays visible while the projection is unattached')
       assert.ok(notes.some(line => line.includes('for read: unattached')), 'the unattached state is observable')
       const run = await executeCall(ctx, { agent: owner, toolSet: step.toolSet, name: 'run_code', callId: 'hide-unattached',
-        arguments: { description: 'Call the officials kept by an unattached projection', code: 'return { read: await tools.read({}) }' },
+        arguments: { description: 'Call the officials kept by an unattached projection', code: programForHost('return { read: await tools.read({}) }') },
         signal: new AbortController().signal })
       assert.equal(run.isError, false, JSON.stringify(run))
-      assert.deepEqual(run.value.result, { read: { official: 'read' } })
+      assert.deepEqual(inspected(run), { read: { official: 'read' } })
     } finally { step.dispose() }
   } finally { await shutdown(ctx) }
 }))
@@ -362,10 +363,13 @@ await test('kept official write, edit and read_image keep their real schemas and
   const step = await prepareStep(ctx, owner)
   try {
     const run = await executeCall(ctx, { agent: owner, toolSet: step.toolSet, name: 'run_code', callId: 'hide-real-schema',
-      arguments: { description: 'Call the kept official tools', code: 'return { write: await tools.write({ file_path: \'a.txt\', content: \'x\' }), edit: await tools.edit({ file_path: \'a.txt\', old_string: \'x\', new_string: \'y\' }), image: await tools.read_image({ file_path: \'a.txt\' }) }' },
+      arguments: { description: 'Call the kept official tools', code: programForHost('return { write: await tools.write({ file_path: \'a.txt\', content: \'x\' }), edit: await tools.edit({ file_path: \'a.txt\', old_string: \'x\', new_string: \'y\' }), image: typeof tools.read_image }') },
       signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
-    assert.deepEqual(run.value.result, { write: { official: 'write' }, edit: { official: 'edit' }, image: { official: 'read_image' } })
+    // Host 0.2.3 requires an image-producing call to yield exactly one image backed by
+    // readable image storage; this fixture has no attachment store, so the kept binding is
+    // asserted as callable and its schema above, not invoked into a fabricated image.
+    assert.deepEqual(inspected(run), { write: { official: 'write' }, edit: { official: 'edit' }, image: 'function' })
   } finally { step.dispose() }
 }, realDefinition)))
 

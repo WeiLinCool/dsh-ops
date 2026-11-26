@@ -1,5 +1,6 @@
 /** Built-in consumer state; Compatibility is retired by the single-row model. */
 import type { Context } from '../adapter/dsh/types.js'
+import { rootOf } from '../adapter/dsh/root.js'
 import type { ModeConfig } from './config.js'
 import type { ModeId } from './types.js'
 
@@ -18,7 +19,7 @@ const states = new WeakMap<object, State>()
 
 /** The shared state of one Cordis root. */
 function stateOf(ctx: Context): State {
-  const key: object = ctx.root ?? ctx
+  const key: object = rootOf(ctx)
   let state = states.get(key)
   if (state === undefined) { state = { modes: new Map() }; states.set(key, state) }
   return state

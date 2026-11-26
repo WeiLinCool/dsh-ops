@@ -1,6 +1,7 @@
 /** Prototype evidence, not a production OPS contract migration. */
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { assert, test, report } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { executeCall } from './lib/executor.mjs'
 import { canonicalFixture } from './lib/canonical-projection-prototype.mjs'
 
@@ -8,7 +9,7 @@ async function invoke(h, agent, step, ptc = false) {
   return executeCall(h.ctx, { agent, toolSet: step.toolSet, callId: 'canonical-probe',
     name: ptc ? 'run_code' : h.definition.name,
     arguments: ptc ? { description: 'Read canonical fixture outcome',
-      code: `const value = await tools.${h.definition.name}({}); if (value.status !== 'completed' || value.data.items[0].line !== 1) throw new Error('Not a typed Outcome'); return value;` } : {} })
+      code: `const value = await tools.${h.definition.name}({}); if (value.status !== 'completed' || value.data.items[0].line !== 1) throw new Error('Not a typed Outcome'); inspect(JSON.stringify(value))` } : {} })
 }
 
 await test('one ancestor identity renders Native text and real run_code returns typed Outcome', async () => {
@@ -28,8 +29,8 @@ await test('one ancestor identity renders Native text and real run_code returns 
     assert.ok(!native.content.some(b => b.text?.includes('"status"')), 'Native content is not Outcome JSON')
     const ptc = await invoke(h, parent, p, true)
     assert.equal(ptc.isError, false, JSON.stringify(ptc))
-    assert.deepEqual(ptc.value.result, native.value)
-    assert.deepEqual(validateJsonSchemaValue(h.schema, ptc.value.result), [])
+    assert.deepEqual(inspected(ptc), native.value)
+    assert.deepEqual(validateJsonSchemaValue(h.schema, inspected(ptc)), [])
     assert.equal(h.calls(), 2)
     console.log('       Native content:', JSON.stringify(native.content))
     console.log('       Native value / PTC program result:', JSON.stringify(native.value))

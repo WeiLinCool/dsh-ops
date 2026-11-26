@@ -10,6 +10,7 @@ import { mountPtc } from '../lib/publication/ptc.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 requireWorker('ptc-grant-lifecycle')
 
@@ -41,10 +42,10 @@ await test('unchanged ancestor step/end preserves descendant file identity and r
       assert.equal(tools.executable('ops_stat', descendant, prepared.toolSet), before, 'no-change step must not retire the descendant snapshot')
     }
     const result = await executeCall(ctx, { agent: descendant, toolSet: prepared.toolSet, name: 'run_code',
-      arguments: { description: 'Read stat through preserved SDK handle', code: "return await tools.ops_stat({path:'note'});" }, callId: 'stable-stat' })
+      arguments: { description: 'Read stat through preserved SDK handle', code: programForHost("return await tools.ops_stat({path:'note'});") }, callId: 'stable-stat' })
     assert.equal(result.isError, false, JSON.stringify(result))
-    assert.equal(result.value.result.status, 'completed', JSON.stringify(result))
-    assert.equal(result.value.result.data.exists, true, JSON.stringify(result))
+    assert.equal(inspected(result).status, 'completed', JSON.stringify(result))
+    assert.equal(inspected(result).data.exists, true, JSON.stringify(result))
   } finally { prepared?.dispose(); await shutdown(ctx) }
 }))
 report('ptc-grant-lifecycle')

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { assert, test, report, withTempDir, PACKAGE_ROOT } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { bootLoop } from './lib/agent-loop.mjs'
@@ -49,18 +50,18 @@ await test('real PTC loop keeps the current run_code snapshot fixed and publishe
     const owner = await host.agent(), sibling = await host.agent()
     const run = await host.run(owner, [request => {
       assert.deepEqual(names(request), ['run_code']); assert.doesNotMatch(text(request), /ops_stat:/)
-      return [sdkCall("const selected = await tools.ops_load_sdk({tools:['stat']}); let unavailable = false; try { await tools.ops_stat({path:'note'}); } catch { unavailable = true; } return {selected,unavailable};")]
+      return [sdkCall("const selected = await tools.ops_load_sdk({tools:['stat']}); let unavailable = false; try { await tools.ops_stat({path:'note'}); } catch { unavailable = true; } inspect(JSON.stringify({selected,unavailable}));")]
     }, request => {
       assert.deepEqual(names(request), ['run_code']); assert.match(text(request), /ops_stat:/)
       assert.equal(host.ctx.get('tools').executable('ops_stat', sibling), undefined)
-      return [sdkCall("return await tools.ops_stat({path:'note'});")]
+      return [sdkCall("inspect(JSON.stringify(await tools.ops_stat({path:'note'})));")]
     }, []])
     const calls = run.results.filter(value => value.exec.name === 'run_code')
     assert.equal(calls.length, 2)
     assert.equal(calls[0].result.isError, false, JSON.stringify(calls[0].result))
-    assert.equal(calls[0].result.value.result.selected.status, 'completed')
-    assert.equal(calls[0].result.value.result.unavailable, true)
-    assert.equal(calls[1].result.value.result.data.exists, true, JSON.stringify(calls[1].result.value))
+    assert.equal(inspected(calls[0].result).selected.status, 'completed')
+    assert.equal(inspected(calls[0].result).unavailable, true)
+    assert.equal(inspected(calls[1].result).data.exists, true, JSON.stringify(calls[1].result.value))
   } finally { await host.close() }
 }))
 await test('real committed authority changes cancel pending activation while always-loaded capabilities are ready at startup', () => withTempDir('loop-mode-change', async root => {
@@ -124,7 +125,7 @@ await test('the isolated entry truly routes one OPS-PTC request and records its 
     // The resident SDK really answered through the worker; a fresh fixture file, nothing real.
     const executed = report.evidence.executed
     assert.equal(executed.isError, false, JSON.stringify(executed))
-    assert.equal(executed.value.result.status, 'completed')
+    assert.equal(inspected(executed).status, 'completed')
   } finally { await group.close() }
 }))
 

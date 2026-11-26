@@ -10,6 +10,7 @@ import { assert } from './harness.mjs'
 import { publicToolName } from '../../lib/policy.js'
 import { integration } from '../../lib/integration/index.js'
 import { prepareStep, executeCall, selectExecutor } from './executor.mjs'
+import { inspected, programForHost } from './inspected.mjs'
 let serial = 0
 export async function documentHost(root, names, { real = false } = {}) {
   const { ctx } = await bootHost()
@@ -57,6 +58,6 @@ export async function activateDocument(ctx, agent, name, mode = 'native') {
 }
 export async function documentCode(ctx, agent, code) {
   const result = await executeCall(ctx, { name: 'run_code', callId: 'documents-' + ++serial, agent, toolSet: agent.prepared.toolSet, signal: new AbortController().signal,
-    arguments: { description: 'Read document data through the scoped SDK', code } })
-  assert.equal(result.isError, false, JSON.stringify(result)); return result.value.result
+    arguments: { description: 'Read document data through the scoped SDK', code: programForHost(code) } })
+  assert.equal(result.isError, false, JSON.stringify(result)); return inspected(result)
 }

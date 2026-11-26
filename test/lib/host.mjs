@@ -46,6 +46,21 @@ export async function bootHost({ withTools = true, withSystemPrompt = true, keep
     ctx.logger.level = 0
   }
   if (withSystemPrompt) {
+    // Host 0.2.3 makes the prompt registry inject `sessionProjections` and registers a
+    // prompt-admission unit in its init, so the registry must be mounted first. The
+    // suite sessions are fixtures: they carry no log and no `inheritedEventCount`, and
+    // driving one through a unit would throw before the plugin's own listener runs.
+    // Real sessions are driven unchanged.
+    const Projections = (await import('@deepseek-ai/dsh-session-projection')).default
+    class FixtureSafeProjections extends Projections {
+      drive(session, event) {
+        // A fixture session carries no log and its events carry no committed seq, so a
+        // drive would brand undefined values and throw before the plugin's listener runs.
+        if (!Number.isSafeInteger(session?.inheritedEventCount) || !Number.isSafeInteger(event?.seq)) return
+        return super.drive(session, event)
+      }
+    }
+    await ctx.plugin(FixtureSafeProjections, {})
     const SystemPrompt = (await import('@deepseek-ai/dsh-system-prompt')).default
     await ctx.plugin(SystemPrompt, {})
   }

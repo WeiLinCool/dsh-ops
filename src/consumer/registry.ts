@@ -1,5 +1,6 @@
 /** Explicit preset bindings, isolated by Cordis root and host scope ancestry. */
 import type { Context, Agent } from '../adapter/dsh/types.js'
+import { rootOf } from '../adapter/dsh/root.js'
 import { loadScopes } from '../adapter/dsh/host.js'
 import { presetOf } from './identity.js'
 import type { IntegrationConfig } from './options.js'
@@ -7,7 +8,7 @@ interface Binding { config: IntegrationConfig; scope?: object; active: boolean }
 interface State { bindings: Binding[]; listeners: Set<() => void>; chain(scope: object): object[] }
 const states = new WeakMap<object, State>()
 export function integrationFor(ctx: Context, agent: Agent): IntegrationConfig | undefined {
-  const state = states.get(ctx.root ?? ctx)
+  const state = states.get(rootOf(ctx))
   if (!state) return undefined
   const preset = presetOf(ctx, agent)
   for (const scope of [...state.chain(agent), undefined]) {
@@ -17,14 +18,14 @@ export function integrationFor(ctx: Context, agent: Agent): IntegrationConfig | 
   return undefined
 }
 export function onIntegrationsChange(ctx: Context, listener: () => void): () => void {
-  const state = states.get(ctx.root ?? ctx)
+  const state = states.get(rootOf(ctx))
   if (!state) return () => {}
   state.listeners.add(listener)
   return () => { state.listeners.delete(listener) }
 }
 export async function joinIntegration(ctx: Context, config: IntegrationConfig) {
   const { scopeOf, scopeChainOf } = await loadScopes()
-  const key = ctx.root ?? ctx
+  const key = rootOf(ctx)
   let state = states.get(key)
   if (!state) { state = { bindings: [], listeners: new Set(), chain: scopeChainOf }; states.set(key, state) }
   const owner = state, row: Binding = { config, scope: scopeOf(ctx), active: true }

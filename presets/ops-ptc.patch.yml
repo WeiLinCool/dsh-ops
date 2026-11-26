@@ -3,7 +3,7 @@
 #   node scripts/sync-preset-ops-ptc.mjs
 #
 # Source: @deepseek-ai/dsh-web-app/presets/ptc.patch.yml
-# Source sha256: ce02148b1fd575cc93071744180468cd305bdcd50dbfdd3b9b0605c5281d283d
+# Source sha256: 17e4755203aff21decbf410197e826eda8cecdb04f1e9a3ab68d77fd03adb817
 #
 # The patch below is the upstream preset byte for byte, except that the row
 # id, preset id, name, description and order are the ops-ptc identity.
@@ -48,6 +48,9 @@
             name: '@deepseek-ai/dsh-tool-schedule'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: command-goal
@@ -100,6 +103,8 @@
             config:
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
+                config:
+                  interrupt: false
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
@@ -135,9 +140,11 @@
             name: '@deepseek-ai/dsh-tool-executor-ptc'
           - id: present
             name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-office
+            name: '@deepseek-ai/dsh-tool-office'
           - id: tool-plugin-manager
             name: '@deepseek-ai/dsh-plugin-manager/tools'
-            disabled: true
+            disabled: !!js "!ctx.get('profileContext')"
           - id: tool-plugin-market
             name: '@deepseek-ai/dsh-plugin-market/tools'
             disabled: true

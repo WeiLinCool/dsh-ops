@@ -43,6 +43,7 @@ import { integration } from '../lib/integration/index.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { prepareStep, executeCall, selectExecutor } from './lib/executor.mjs'
 import { assert, test, report, wait, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { BASH_TOOL } from '../lib/policy.js'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 
@@ -154,9 +155,9 @@ async function advanceStep(ctx, agent) {
 /** One real run_code program through the prepared step, as the loop issues it. */
 async function program(ctx, agent, code, label) {
   const result = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-    arguments: { description: label, code }, callId: 'matrix-' + ++sequence, signal: new AbortController().signal })
+    arguments: { description: label, code: programForHost(code) }, callId: 'matrix-' + ++sequence, signal: new AbortController().signal })
   assert.equal(result.isError, false, JSON.stringify(result))
-  return result.value.result
+  return inspected(result)
 }
 
 /** The no-side-effect sentinel each row really executes through the worker. */

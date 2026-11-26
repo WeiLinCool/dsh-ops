@@ -11,6 +11,7 @@ import { mountPtc } from '../lib/publication/ptc.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 requireWorker('shared-file-cancellation')
 const pending = [], waiters = [], purges = []
@@ -78,7 +79,7 @@ await test('discovery lifetime, independent PTC, caller abort and source disposa
     let id = 0
     const call = (owner, signal) => executeCall(ctx, { agent: owner.agent, toolSet: owner.step.toolSet,
       name: owner === a ? 'ops_stat' : 'run_code', callId: `cancel-${++id}`, signal,
-      arguments: owner === a ? { path: 'note' } : { description: 'Stat', code: "return await tools.ops_stat({path:'note'});" } })
+      arguments: owner === a ? { path: 'note' } : { description: 'Stat', code: programForHost("return await tools.ops_stat({path:'note'});") } })
     const nativeWork = call(a), native = await next(nativeWork, 'Native lifetime call')
     const ptcWork = call(b), independent = await next(ptcWork, 'independent PTC call')
     await discovery.dispose()
@@ -88,7 +89,7 @@ await test('discovery lifetime, independent PTC, caller abort and source disposa
     assert.equal(cancelled.value.error.code, 'RESULT_UNKNOWN', JSON.stringify(cancelled))
     assert.equal(cancelled.value.error.effectState, 'unknown')
     independent.release()
-    assert.equal((await ptcWork).value.result.status, 'completed')
+    assert.equal(inspected(await ptcWork).status, 'completed')
     const caller = new AbortController(), callerWork = call(b, caller.signal), parent = await next(callerWork, 'caller cancellation PTC call')
     caller.abort(new Error('Parent cancelled'))
     assert.equal(parent.signal.aborted, true)

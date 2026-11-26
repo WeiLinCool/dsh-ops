@@ -17,6 +17,7 @@ import { publicToolName } from '../lib/policy.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 import { docx, paragraph } from './lib/document-fixture.mjs'
 import { textPdf, show } from './lib/pdf-fixture.mjs'
@@ -75,9 +76,9 @@ await test('four audited reads preserve typed data, Native text and single worke
         assert.deepEqual(validateJsonSchemaValue(definition.parameters, args), [])
         const before = envelopes.length
         const result = await executeCall(ctx, { agent, toolSet: step.toolSet, name: mode === 'native' ? name : 'run_code',
-          callId: `${mode}-${index}`, arguments: mode === 'native' ? args : { description: api, code: `return await tools.${name}(${JSON.stringify(args)});` } })
+          callId: `${mode}-${index}`, arguments: mode === 'native' ? args : { description: api, code: programForHost(`return await tools.${name}(${JSON.stringify(args)});`) } })
         assert.equal(result.isError, false, JSON.stringify(result))
-        const value = mode === 'native' ? result.value : result.value.result
+        const value = mode === 'native' ? result.value : inspected(result)
         assert.equal(value.status, 'completed', JSON.stringify(value)); check(value.data)
         assert.deepEqual(validateJsonSchemaValue(definition.output.schema, value), [])
         assert.equal(envelopes.length - before, 1, 'exactly one real worker envelope per call')

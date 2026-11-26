@@ -41,16 +41,21 @@ const HOST_PLUGINS = [[FsTools, {}], [SearchTools, { sampleOverCapGlobResults: f
 /** The official names the shipped row replaces; the ledger compares SDK names against them. */
 const OFFICIAL = ['read', 'glob', 'grep']
 /** A thin single-dispatch program with no plan line: it earns the plan notice. */
-const THIN_PROGRAM = "const row = await tools.ops_inspect_local_file({ path: 'ledger-note' })\nreturn row"
+const THIN_PROGRAM = "const row = await tools.ops_inspect_local_file({ path: 'ledger-note' })\ninspect(JSON.stringify(row))"
 /** A compliant load step: plan line plus one batched dispatch; it earns no notice. */
 const LOAD_PROGRAM = '// plan: load the on-demand search APIs\n'
   + "const [loaded] = await Promise.all([tools.ops_load_sdk({ tools: ['glob', 'grep', 'read_files'] })])\n"
-  + 'return { loaded }'
+  + 'inspect(JSON.stringify({ loaded }))'
 const LEDGER_NOTE = 'ledger-note'
 
 const bytes = value => Buffer.byteLength(String(value), 'utf8')
 const sha = value => createHash('sha256').update(String(value)).digest('hex')
-const textOf = message => (message.content ?? []).map(part => part.text ?? '').join('')
+/**
+ * One message as the model reads it. Since 0.2.3 a system message carries one text part per
+ * prompt section, so joining the parts with '' would silently drop the blank line between
+ * sections that `renderPrompt` inserts.
+ */
+const textOf = message => (message.content ?? []).map(part => part.text ?? '').join(message.role === 'system' ? '\n\n' : '')
 /** One SDK member declaration line: "  name: <type>;" (quoted names keep their backticks). */
 const SDK_MEMBER = /^ {2}(?:([A-Za-z_$][\w$]*)|`([^`]+)`): /gm
 const sdkNamesOf = text => {
@@ -121,7 +126,7 @@ async function runScenario(root, { hostPlugins = [] } = {}) {
           stage,
           system: { bytes: bytes(rendered), sha: sha(rendered),
             items: sections.map(section => ({ name: section.name, bytes: bytes(section.text), sha: sha(section.text) })) },
-          sdk: { sections: sdk.length, bytes: bytes(sdkText), sha: sha(sdkText), names: sdkNamesOf(sdkText) },
+          sdk: { sections: sdk.length, bytes: bytes(sdkText), sha: sha(sdkText), names: sdkNamesOf(sdkText), text: sdkText },
           wire: { bytes: bytes(wire), sha: sha(wire), names: step.assembly.tools.map(tool => tool.name).sort() },
         }
       } finally { step.dispose() }
@@ -133,6 +138,7 @@ async function runScenario(root, { hostPlugins = [] } = {}) {
         wireNames: request.tools.map(tool => tool.name).sort(),
         wireSha: sha(JSON.stringify(request.tools)),
         systemSha: sha(textOf(request.messages.find(message => message.role === 'system'))),
+        systemUpdates: request.messages.filter(message => message.role === 'system').slice(1).map(message => textOf(message)),
         history: historyItemsOf(request.messages),
         delivered: { messages: request.messages.length, bytes: bytes(request.messages.map(textOf).join('\n')) },
       })
@@ -232,12 +238,22 @@ await test('the four accounts of one OPS-PTC group: system, its SDK subset, the 
   assert.deepEqual(kindsAt('after-load'), ['teaching', 'notice:plan'], 'a compliant load step earns no new notice')
   assert.deepEqual(kindsAt('repeat'), ['teaching', 'notice:plan'], 'no re-teaching, no duplicate notice')
   // The delivered system message is the idle assembly, and repeats are byte-identical.
-  const systemAt = label => requests.find(request => request.label === label).systemSha
+  const requestAt = label => requests.find(request => request.label === label)
+  const systemAt = label => requestAt(label).systemSha
+  const updatesAt = label => requestAt(label).systemUpdates
   assert.equal(systemAt('first'), snapshots.baseline.system.sha)
   assert.equal(systemAt('after-notice'), snapshots.baseline.system.sha)
   assert.equal(systemAt('before-load'), snapshots.steady.system.sha)
-  assert.equal(systemAt('after-load'), snapshots.loaded.system.sha)
-  assert.equal(systemAt('repeat'), snapshots.loaded.system.sha, 'the same config repeated is byte-identical')
+  // Since 0.2.3 a changed section is delivered as a replacement system message instead of a
+  // rebuilt prompt: the first system message stays byte-identical, and the update supersedes
+  // tools:sdk. That is how the loaded SDK reaches the model on the very next request.
+  for (const label of ['first', 'after-notice', 'before-load']) {
+    assert.deepEqual(updatesAt(label), [], 'no section changes before the load')
+  }
+  const replacement = 'The following replaces the earlier instructions from tools:sdk.\n\n' + snapshots.loaded.sdk.text
+  assert.deepEqual(updatesAt('after-load'), [replacement], 'the loaded SDK arrives as its replacement message')
+  assert.equal(systemAt('after-load'), snapshots.steady.system.sha, 'the base message is still the pre-load one')
+  assert.deepEqual(updatesAt('repeat'), [replacement], 'the same config repeated is byte-identical')
   assert.equal(snapshots.repeat.system.sha, snapshots.loaded.system.sha)
   printLedger(first)
   // E: the same fixture and code reproduce every byte in a fresh group.

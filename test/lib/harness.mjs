@@ -141,6 +141,25 @@ const REAL_TIMERS = { setTimeout: globalThis.setTimeout, clearTimeout: globalThi
 export const wait = (ms) => new Promise((resolve) => REAL_TIMERS.setTimeout(resolve, ms))
 
 /**
+ * Change a session's sandbox mode the way the host does.
+ *
+ * A PTC runtime keeps one retained environment per session and refuses a policy change
+ * until it is released; only the committed `sandbox/mode` event triggers that release.
+ * Tests that mutate `session.mode` directly hit `PTC_RUNTIME_CONFLICT` instead.
+ *
+ * @param {object} ctx - the host context that emits session events.
+ * @param {object} session - the session whose mode changes.
+ * @param {string} mode - the new sandbox mode.
+ * @returns {Promise<void>} resolves after the release had a turn to run.
+ */
+export async function setSandboxMode(ctx, session, mode) {
+  session.mode = mode
+  await ctx.serial('session/event', session, { type: 'sandbox/mode', data: { mode } })
+  // The release is fire-and-forget; one turn is enough for the worker to close.
+  await new Promise((resolve) => setImmediate(resolve))
+}
+
+/**
  * Wait until a condition holds, or fail after a deadline.
  * @param {() => boolean | Promise<boolean>} condition - the predicate.
  * @param {object} [options] - wait inputs.

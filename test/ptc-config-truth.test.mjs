@@ -23,6 +23,7 @@ import { BASH_TOOL, publicToolName } from '../lib/policy.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { prepareStep, executeCall, selectExecutor } from './lib/executor.mjs'
 import { assert, test, report, wait, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 
 /** The truth table's right-hand columns, as this suite locks them. */
@@ -147,10 +148,10 @@ await test('row 1 (defaults): first round is inspect + loader; grep loads for th
     rowSets.r1 = opsNames(ctx, agent)
     assert.deepEqual(rowSets.r1, ROW_DEFAULT)
     const run = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'Load grep', code: "const picked = await tools.ops_load_sdk({ tools: ['grep'] })\nreturn { picked }" },
+      arguments: { description: 'Load grep', code: "const picked = await tools.ops_load_sdk({ tools: ['grep'] })\ninspect(JSON.stringify({ picked }))" },
       callId: 'truth-r1-' + ++sequence, signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
-    assert.equal(run.value.result.picked.status, 'completed', JSON.stringify(run))
+    assert.equal(inspected(run).picked.status, 'completed', JSON.stringify(run))
     assert.equal(opsNames(ctx, agent).includes('ops_grep'), false, 'loadable-not-loaded: activation is next-step only')
     await step(ctx, agent)
     assert.ok(opsNames(ctx, agent).includes('ops_grep'), 'grep is callable after the next step')
@@ -185,10 +186,10 @@ await test('row 5 (residentTools:false): first round is the loader only; inspect
     assert.deepEqual(rowSets.r5, ROW_RESIDENT_OFF)
     assert.equal(rowSets.r5.includes('ops_inspect_local_file'), false)
     const run = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-      arguments: { description: 'Probe inspect', code: "const blocked = await tools.ops_load_sdk({ tools: ['inspect_local_file'] })\nreturn { blocked }" },
+      arguments: { description: 'Probe inspect', code: "const blocked = await tools.ops_load_sdk({ tools: ['inspect_local_file'] })\ninspect(JSON.stringify({ blocked }))" },
       callId: 'truth-r5-' + ++sequence, signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
-    assert.equal(run.value.result.blocked.error.code, 'INVALID_ARGUMENT', 'the resident API is not loadable while residentTools is off')
+    assert.equal(inspected(run).blocked.error.code, 'INVALID_ARGUMENT', 'the resident API is not loadable while residentTools is off')
   } finally { await shutdown(ctx) }
 }))
 

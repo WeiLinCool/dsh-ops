@@ -9,6 +9,7 @@ import FileSystem from '@deepseek-ai/dsh-fs-local'
 import NodePtc from '@deepseek-ai/dsh-ptc-runtime-node'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import { assert, test, report, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 import { legacyComponent } from './lib/legacy-component.mjs'
@@ -49,8 +50,8 @@ async function fixture(root, run) {
     } finally { step.dispose() }
     const call = async code => {
       const result = await executeCall(ctx, { name: 'run_code', callId: `composition-${++serial}`,
-        agent, signal: new AbortController().signal, arguments: { description: 'Verify read-to-edit composition', code } })
-      assert.equal(result.isError, false, JSON.stringify(result)); return result.value.result
+        agent, signal: new AbortController().signal, arguments: { description: 'Verify read-to-edit composition', code: programForHost(code) } })
+      assert.equal(result.isError, false, JSON.stringify(result)); return inspected(result)
     }
     await run(call)
   } finally { await shutdown(ctx) }

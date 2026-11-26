@@ -20,7 +20,7 @@ await test('the shipped guidance is English Markdown with its host-source identi
   }
   assert.equal(BATCHING_GUIDANCE_ID, 'batching-guidance')
   // A wording or format change is a product change and must bump the revision.
-  assert.equal(BATCHING_GUIDANCE_REVISION, '9')
+  assert.equal(BATCHING_GUIDANCE_REVISION, '10')
 })
 
 await test('the guidance loader returns exactly the shipped Markdown file', () => {
@@ -103,7 +103,19 @@ await test('the teacher trajectory pins the first-line plan and a runnable load 
   assert.ok(text.includes('nextOffset'), 'paging advances by the cursor')
   // File work belongs to the OPS APIs; a shell example here would teach the bypass.
   for (const banned of ['find .', 'ls -la', 'grep -rn']) assert.ok(!text.includes(banned), banned)
-  assert.ok(text.length > 2500 && text.length < 9000, 'guidance stays bounded: ' + text.length)
+  // The scoped-REPL shape costs one short section and the summary names that replace
+  // the illegal `return`; the ceiling moves with it and stays a bound, not a target.
+  assert.ok(text.length > 2500 && text.length < 9700, 'guidance stays bounded: ' + text.length)
+})
+
+await test('every shipped program reports through inspect, never a top-level return', () => {
+  // Host 0.2.3 runs run_code in the scoped REPL: a top-level `return` is a SyntaxError
+  // that discards the program before any tool call runs, so no example may teach one.
+  const text = loadBatchingGuidance()
+  // A `return` inside a callback is legal; only a top-level one (column 0) is fatal.
+  assert.equal(/^return\b/mu.test(text), false, 'no example uses a top-level return')
+  assert.ok(text.includes('## Program shape'), 'the program-shape rule is stated')
+  assert.match(text, /inspect\(summary\)|inspect\(\.\.\.values\)/, 'inspect is the stated output path')
 })
 
 await test('the trim removed repeated prose and the anti-pattern demo', () => {
@@ -143,7 +155,7 @@ await test('the session scope rule reaches every surface that ships the lesson',
 await test('the shipped lesson measures its declared trimmed size', () => {
   // The trim record in the PR declares this size; a wording edit must bump the
   // revision and this number together. The 84 B delivery prefix is counted separately.
-  assert.equal(Buffer.byteLength(loadBatchingGuidance(), 'utf8'), 8922)
+  assert.equal(Buffer.byteLength(loadBatchingGuidance(), 'utf8'), 9371)
 })
 
 await test('a scope with the loader receives the shipped file unchanged', () => {

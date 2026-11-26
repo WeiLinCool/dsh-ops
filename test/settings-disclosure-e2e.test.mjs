@@ -24,6 +24,7 @@ import { profileFixture } from './lib/settings-profile.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { prepareStep, executeCall, selectExecutor } from './lib/executor.mjs'
 import { assert, test, report, wait, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 
 requireWorker('settings-disclosure-e2e')
@@ -110,9 +111,9 @@ async function session(saved, cwd) {
 /** One real run_code program through the prepared step, as the loop issues it. */
 async function program(ctx, agent, code, label) {
   const result = await executeCall(ctx, { agent, toolSet: agent.prepared.toolSet, name: 'run_code',
-    arguments: { description: label, code }, callId: 'disclosure-' + ++sequence, signal: new AbortController().signal })
+    arguments: { description: label, code: programForHost(code) }, callId: 'disclosure-' + ++sequence, signal: new AbortController().signal })
   assert.equal(result.isError, false, JSON.stringify(result))
-  return result.value.result
+  return inspected(result)
 }
 
 /** Wait for the first round to settle, then return its ops_* names. */

@@ -9,6 +9,7 @@ import { mountPtc } from '../lib/publication/ptc.js'
 import { publicToolName } from '../lib/policy.js'
 import { renderSdkDirectory } from '../lib/projections/ptc/directory.js'
 import { assert, test, report, waitFor, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 import { bootHost, shutdown } from './lib/host.mjs'
 
 let sequence = 0
@@ -46,9 +47,9 @@ async function setup(root, config = {}, gate = { allows: () => true }) {
 }
 async function code(ctx, agent, body) {
   const result = await executeCall(ctx, { name: 'run_code', callId: 'directory-call-' + ++sequence,
-    agent, arguments: { description: 'Exercise PTC SDK selection', code: body } })
+    agent, arguments: { description: 'Exercise PTC SDK selection', code: programForHost(body) } })
   assert.equal(result.isError, false, JSON.stringify(result))
-  return result.value.result
+  return inspected(result)
 }
 const callable = (ctx, agent, raw) => code(ctx, agent, `return typeof tools.${publicToolName(raw)}==='function';`)
 const load = (ctx, agent, tools) => code(ctx, agent, `return await tools.${loader}({tools:${JSON.stringify(tools)}});`)

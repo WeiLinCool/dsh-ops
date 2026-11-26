@@ -14,6 +14,7 @@ import { publicToolName } from '../lib/policy.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 requireWorker('shared-file-mutations')
 const mutations = ['write_file', 'edit_file', 'replace', 'copy', 'move', 'remove']
@@ -23,7 +24,7 @@ await test('Native and real run_code preserve mutation effects, CAS and read-onl
   let mode = 'danger-full-access'
   try {
     for (const plugin of [Subprocess, Sandbox, FileSystem, NodePtc]) await ctx.plugin(plugin)
-    ctx.provide('sandboxPolicy', { resolve: () => ({ mode, workspaceRoot: root }) })
+    ctx.provide('sandboxPolicy', { resolve: ({ session } = {}) => ({ mode, workspaceRoot: root, sessionId: session?.id }) })
     await ctx.plugin({ apply(inner) {
       mountNative(inner, resolveConfig({ binaryPath: WORKER, required: true }), {
         id: 'shared-mutations', tools: mutations, section: null, gate: { allows: () => true },
@@ -42,9 +43,9 @@ await test('Native and real run_code preserve mutation effects, CAS and read-onl
       for (const api of mutations) assert.equal(tools.definitions(agent).filter(def => def.name === publicToolName(api)).length, 1)
       const call = async (api, args) => {
         const result = await executeCall(ctx, { agent, toolSet: step.toolSet, name: presentation === 'native' ? publicToolName(api) : 'run_code', callId: `${presentation}-${api}`,
-          arguments: presentation === 'native' ? args : { description: api, code: `return await tools.${publicToolName(api)}(${JSON.stringify(args)});` } })
+          arguments: presentation === 'native' ? args : { description: api, code: `inspect(JSON.stringify(await tools.${publicToolName(api)}(${JSON.stringify(args)})))` } })
         assert.equal(result.isError, false, JSON.stringify(result))
-        return presentation === 'native' ? result.value : result.value.result
+        return presentation === 'native' ? result.value : inspected(result)
       }
       const file = path.join(root, `${presentation}.txt`), copy = file + '.copy', moved = file + '.moved'
       const hash = () => createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -64,10 +65,21 @@ await test('Native and real run_code preserve mutation effects, CAS and read-onl
       if (presentation === 'native') {
         assert.equal((await call('write_file', { path: copy, content: 'unsafe', expectedRevision: revision })).error.code, 'POLICY_DENIED')
       } else {
-        const denied = await executeCall(ctx, { agent, toolSet: step.toolSet, name: 'run_code', callId: 'readonly',
-          arguments: { description: 'Read-only refusal', code: `return await tools.ops_write_file({path:${JSON.stringify(copy)},content:'unsafe',expectedRevision:${JSON.stringify(revision)}});` } })
+        // A retained PTC environment cannot change policy in place: the host opens the new
+        // mode in a fresh session, which is what this second agent models. Reusing the
+        // first one is a PTC_RUNTIME_CONFLICT by design, not a refusal to test.
+        const readOnly = { id: 'mutations-read-only', session: {
+          id: 'mutations-read-only', header: { cwd: root }, append() {}, read() { return [] } } }
+        readOnly.ctx = createScope(ctx, readOnly).ctx
+        await readOnly.ctx.plugin({ inject: ['tools', 'systemPrompt'], apply(inner) { selectExecutor(inner, 'ptc') } })
+        const readOnlyStep = await prepareStep(ctx, readOnly); steps.push(readOnlyStep)
+        // 0.2.3 is fail-closed earlier than a denial: a read-only step publishes no write
+        // binding at all, so the refusal is the absence of `ops_write_file` rather than a
+        // POLICY_DENIED outcome. The unchanged file below is the second half of the proof.
+        const denied = await executeCall(ctx, { agent: readOnly, toolSet: readOnlyStep.toolSet, name: 'run_code', callId: 'readonly',
+          arguments: { description: 'Read-only refusal', code: `inspect(JSON.stringify({ write: typeof tools.ops_write_file }))` } })
         assert.equal(denied.isError, false, JSON.stringify(denied))
-        assert.equal(denied.value.result.error.code, 'POLICY_DENIED')
+        assert.equal(inspected(denied).write, 'undefined', 'read-only publishes no write binding')
       }
       assert.equal(fs.readFileSync(copy, 'utf8'), 'gamma')
       mode = 'danger-full-access'

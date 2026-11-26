@@ -11,6 +11,7 @@ import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { WORKER, requireWorker } from './lib/boundary.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected, programForHost } from './lib/inspected.mjs'
 process.env.DSH_OPS_LEGACY_ROWS = '1'
 requireWorker('ptc-guidance-cleanup')
 
@@ -127,10 +128,10 @@ await test('a kept grep keeps its guidance while the hidden read gains an execut
   const step = await prepareStep(ctx, owner)
   try {
     const run = await executeCall(ctx, { agent: owner, toolSet: step.toolSet, name: 'run_code', callId: 'cleanup-partial',
-      arguments: { description: 'Probe the program bindings', code: 'return { read: typeof tools.read, grep: typeof tools.grep }' },
+      arguments: { description: 'Probe the program bindings', code: programForHost('return { read: typeof tools.read, grep: typeof tools.grep }') },
       signal: new AbortController().signal })
     assert.equal(run.isError, false, JSON.stringify(run))
-    assert.deepEqual(run.value.result, { read: 'undefined', grep: 'function' })
+    assert.deepEqual(inspected(run), { read: 'undefined', grep: 'function' })
   } finally { step.dispose() }
 })))
 

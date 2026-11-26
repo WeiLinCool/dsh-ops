@@ -13,6 +13,7 @@ import { SHARED_FILE_APIS } from '../lib/publication/scope-owner.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { selectExecutor, prepareStep, executeCall } from './lib/executor.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 import { requireWorker, WORKER } from './lib/boundary.mjs'
 requireWorker('discovery-shared-source')
 await test('discovery commits stat/grep next step and withdraws without stopping PTC', () => withTempDir('discovery-shared', async root => {
@@ -78,16 +79,16 @@ await test('discovery commits stat/grep next step and withdraws without stopping
     const canonical = tools.executable('ops_stat', agent, step.toolSet)
     assert.ok(canonical.output.schema)
     for (const [api, args] of Object.entries(queries)) {
-      const result = await call(step, 'run_code', { description: api, code: `return await tools.ops_${api}(${JSON.stringify(args)});` })
+      const result = await call(step, 'run_code', { description: api, code: `inspect(JSON.stringify(await tools.ops_${api}(${JSON.stringify(args)})))` })
       assert.equal(result.isError, false, JSON.stringify(result))
-      assert.equal(result.value.result.status, 'completed', JSON.stringify(result))
+      assert.equal(inspected(result).status, 'completed', JSON.stringify(result))
     }
     await discovery.dispose()
     assert.equal(tools.executable('ops_stat', agent, step.toolSet), undefined, 'withdrawal invalidates captured identity')
     step = await prepare()
-    const after = await call(step, 'run_code', { description: 'Still live', code: "return await tools.ops_stat({path:'note'});" })
+    const after = await call(step, 'run_code', { description: 'Still live', code: "inspect(JSON.stringify(await tools.ops_stat({path:'note'})))" })
     assert.equal(after.isError, false, JSON.stringify(after))
-    assert.equal(after.value.result.data.exists, true)
+    assert.equal(inspected(after).data.exists, true)
     await ptc.dispose()
   } finally { steps.forEach(step => step.dispose()); await shutdown(ctx) }
 }))

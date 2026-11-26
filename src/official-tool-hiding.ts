@@ -160,7 +160,9 @@ export function apply(root: Context, raw?: unknown): void {
       entries.set(agent, { context: agent.ctx as Context, lifts: [], error: blocked('surface verification pending') })
       reconcile()
     }
-    const refusal: ToolGuard = exec => {
+    // The refusal is always one plain message: host 0.2.2 widened ToolGuard to admit a
+    // structured ToolGuardDenial as well, and `tools/pre-execute` still takes a string.
+    const refusal: (exec: Parameters<ToolGuard>[0]) => string | undefined = exec => {
       if (stopped) return blocked('component disposed')
       if (!exec?.agent?.ctx) return blocked('calling agent scope unavailable')
       attach(exec.agent)

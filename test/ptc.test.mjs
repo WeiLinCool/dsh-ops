@@ -2,7 +2,7 @@ import { selectExecutor, executeCall, prepareStep } from './lib/executor.mjs'
 /** Three end-to-end scenarios: real Rust worker + real Cordis/tools/prompt;
  * simulated workspace and confinement provider, no business code in tests.
  */
-import { ownWindowsFixture, skipSuite, waitFor } from './lib/harness.mjs'
+import { ownWindowsFixture, skipSuite, waitFor, setSandboxMode } from './lib/harness.mjs'
 import { workingDirectoryOver } from './lib/host.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -20,6 +20,22 @@ import { tryResolveWorker, resolveWorker } from '../lib/ptc/runtime.js'
 import Sandbox from '@deepseek-ai/dsh-sandbox-local'
 import Subprocess from '@deepseek-ai/dsh-subprocess-local'
 import NodePtc from '@deepseek-ai/dsh-ptc-runtime-node'
+import { inspected, programForHost } from './lib/inspected.mjs'
+
+/**
+ * Mount the prompt stack the way the host does.
+ *
+ * Since 0.2.3 the prompt registry injects `sessionProjections` in its init; mounting the
+ * registry first keeps SystemPrompt (and every tool runtime that injects it) from queueing
+ * forever, which used to leave `ctx.get('tools')` undefined.
+ */
+async function mountPrompt(ctx) {
+  const Projections = (await import('@deepseek-ai/dsh-session-projection')).default
+  // These fixtures write raw session objects, not committed event logs; never drive them.
+  class FixtureSafeProjections extends Projections { drive() {} }
+  await ctx.plugin(FixtureSafeProjections, {})
+  await ctx.plugin(SystemPrompt, {})
+}
 import FileSystem from '@deepseek-ai/dsh-fs-local'
 import { invoke } from '../lib/ptc/worker.js'
 import { invoke as invokeFile } from '../lib/file/worker.js'
@@ -220,7 +236,7 @@ try {
       }) }) }
   } }
   try {
-    await ctx.plugin(SystemPrompt, {}); await ctx.plugin(ToolRuntime, {})
+    await mountPrompt(ctx); await ctx.plugin(ToolRuntime, {})
   await ctx.plugin(await import('@deepseek-ai/dsh-tool-executor-native'), {})
     let sandboxAvailable = true
     await ctx.plugin(inner => {
@@ -434,7 +450,7 @@ try {
   const nonTemp = fs.mkdtempSync(path.join(os.homedir(),'ops-outside-'))
   const externalNonTemp = path.join(nonTemp,'protected.txt'); fs.writeFileSync(externalNonTemp,'keep')
   try {
-    await real.plugin(SystemPrompt, {}); await real.plugin(ToolRuntime, {})
+    await mountPrompt(real); await real.plugin(ToolRuntime, {})
     await real.plugin(await import('@deepseek-ai/dsh-tool-executor-native'), {})
     await real.plugin(Subprocess)
     await real.plugin(Sandbox, {})
@@ -452,10 +468,10 @@ try {
     assert.ok(real.get('tools').get('ops_result', agent), JSON.stringify(await real.get('systemPrompt').assemble({ scope: agent })))
     const sdk = async code => {
       const completion = await executeCall(real, { name: 'run_code', callId: 'ptc-result-sdk', agent,
-        signal: new AbortController().signal, arguments: { description: 'Verify bounded PTC-native dataflow', code } })
+        signal: new AbortController().signal, arguments: { description: 'Verify bounded PTC-native dataflow', code: programForHost(code) } })
       assert.notEqual(completion.isError, true, JSON.stringify(completion))
       assert.equal(completion.value.sandbox.mode, agent.session.mode, JSON.stringify(completion))
-      return completion.value.result
+      return inspected(completion)
     }
     const legacy = request('result', { action: 'put', items: [{ legacy: true }] }, agent.session.id)
     const foreignLegacy = request('result', { action: 'put', items: [{ foreign: true }] }, 'foreign-sdk-owner')
@@ -502,7 +518,7 @@ try {
     assert.equal(fs.readFileSync(externalNonTemp, 'utf8'), 'keep')
     assert.match(sdkResult.audit.revision, /^[a-f0-9]{64}$/)
     assert.equal(sdkResult.resumed, 'completed'); assert.equal(sdkResult.replay, 1)
-    agent.session.mode = 'read-only'
+    await setSandboxMode(real, agent.session, 'read-only')
     const sdkReadonly = await sdk(`
       const denied = await tools.ops_result({action:'put',items:[{n:1}]});
       const page = await tools.ops_result({action:'page',id:${JSON.stringify(sdkResult.detailsRef)},fields:['state'],maxBytes:512});
@@ -511,7 +527,7 @@ try {
     assert.equal(sdkReadonly.denied.error.code, 'POLICY_DENIED')
     assert.equal(sdkReadonly.denied.data.error.permission.current, 'read-only')
     assert.equal(sdkReadonly.page.data.items[0].state, 'completed')
-    agent.session.mode = 'workspace-write'
+    await setSandboxMode(real, agent.session, 'workspace-write')
     await sdkComponent.dispose()
     assert.equal(real.get('tools').schemas(agent).some(schema => schema.name.startsWith('ops_')), false)
     const call = (tool,args) => invoke(real,file,tool,args,{agent},new AbortController().signal)

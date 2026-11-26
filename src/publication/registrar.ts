@@ -1,5 +1,6 @@
 /** Source-layer publication only; no provider or projection policy lives here. */
 import type { Agent, Context, ToolDefinition, ToolRunContext, ToolActivationContext } from '../adapter/dsh/types.js'
+import { rootOf } from '../adapter/dsh/root.js'
 import type { Outcome } from '../kernel/outcome.js'
 import { loadScopes } from '../adapter/dsh/host.js'
 import { publicationReady, publicationRegistration } from './reentry.js'
@@ -51,7 +52,7 @@ export function publicationAdmission(tool: ToolDefinition): ((activation: ToolAc
 /** Exact live source identity; a matching name or output contract grants nothing. */
 export function ownsPublication(ctx: Context, tool: ToolDefinition): boolean {
   const owner = published.get(tool)
-  return owner?.root === (ctx.root ?? ctx) && owner.current()
+  return owner?.root === rootOf(ctx) && owner.current()
 }
 
 /**
@@ -71,7 +72,7 @@ export async function acquire(ctx: Context, scope: object | undefined, name: str
   const { scopeOf, scopeChainOf } = await loadScopes()
   ctx.fiber.assertActive()
   if (scopeOf(ctx) !== scope) throw new Error('Publication scope must match its registration context')
-  const root = ctx.root ?? ctx
+  const root = rootOf(ctx)
   let scopes = roots.get(root)
   if (!scopes) { scopes = new Map(); roots.set(root, scopes) }
   let names = scopes.get(scope)

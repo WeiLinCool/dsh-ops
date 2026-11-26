@@ -21,7 +21,8 @@ export function componentProfile(label, bundleText, patches = []) {
   const patchPath = path.join(dir, 'cordis.patch.yml'), baseFile = path.join(dir, 'cordis.yml')
   fs.writeFileSync(patchPath, JSON.stringify(patches)); fs.writeFileSync(baseFile, '[]\n')
   const installAnchor = path.join(install, 'package.json'); fs.writeFileSync(installAnchor, '{"name":"fixture-installation"}')
-  const profile = { home, dir, patchPath, installAnchor, overlays: [], startedBundles: ['dsh-ops'] }
+  // Host 0.2.2-rc.3 replaced the merged `overlays` list with per-layer `overlayPaths`.
+  const profile = { home, dir, patchPath, installAnchor, overlayPaths: [], startedBundles: ['dsh-ops'] }
   return { profile, bundlePath, baseFile, async boot(platform = process.platform) {
     const { ctx } = await bootHost()
     // A public Context value lets the real Loader evaluate the platform expression

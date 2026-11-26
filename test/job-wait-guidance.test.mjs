@@ -10,6 +10,7 @@ import { resolveConfig } from '../lib/config.js'
 import { BASH_TOOL } from '../lib/policy.js'
 import { bootHost, shutdown } from './lib/host.mjs'
 import { assert, test, report, withTempDir } from './lib/harness.mjs'
+import { inspected } from './lib/inspected.mjs'
 
 await test('only bounded standalone long sleeps qualify, with no loop or external command inference', () => {
   for (const command of ['sleep 20', 'sleep 0.5m', 'sudo sleep 1h', '/usr/bin/sleep 1d', 'Start-Sleep -Seconds 30', 'Start-Sleep -Milliseconds 20000']) assert.equal(isLongStandaloneSleep(command), true, command)
@@ -56,7 +57,7 @@ await test('the owning consumer observes real Native/PTC results and keeps untri
     assert.equal((await hints(native)).length, 1)
     await execute(native, BASH_TOOL, { command: 'sleep 40' }); assert.equal((await hints(native)).length, 1)
     assert.equal(JSON.stringify(await sections(untouched)), before, 'untriggered prompt bytes stay identical')
-    const nested = await execute(ptc, 'run_code', { description: 'Observe a successful delay result', code: `return await tools.${BASH_TOOL}({command:'sleep 30'});` })
+    const nested = await execute(ptc, 'run_code', { description: 'Observe a successful delay result', code: `inspect(JSON.stringify(await tools.${BASH_TOOL}({command:'sleep 30'})))` })
     assert.equal(nested.isError, false, JSON.stringify(nested)); assert.equal((await hints(ptc)).length, 1)
     removeJobs(); assert.equal((await hints(native)).length, 0, 'absence of the wait tool withdraws guidance')
     removeJobs = ctx.tools.register(jobs)
